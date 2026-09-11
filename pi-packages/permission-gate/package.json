@@ -1,0 +1,14 @@
+{
+  "name": "@pi-web-fleet/permission-gate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tool-call approval gate for the PI WEB web UI: blocks write/edit/bash (and external paths) until the operator approves via the in-session approval card.",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}
