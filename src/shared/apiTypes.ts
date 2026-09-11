@@ -1366,3 +1366,48 @@ export type GlobalSessionEvent =
   | ModelScopeChangedEvent
   | ServerNoticeEvent;
 export type RealtimeEvent = GlobalSessionEvent | MachineStatusUiEvent;
+
+/** Status of the change a review record describes. */
+export type ReviewChangeStatus = "added" | "modified" | "deleted";
+
+/** Lifecycle state of the change from the transcript's point of view. */
+export type ReviewChangeState = "active" | "rolledBack";
+
+/** One rendered diff hunk line. */
+export interface ReviewDiffHunkLine {
+  kind: "context" | "add" | "remove";
+  oldLine?: number;
+  newLine?: number;
+  text: string;
+}
+
+/** One contiguous hunk of a file diff. */
+export interface ReviewDiffHunk {
+  oldStart: number;
+  newStart: number;
+  lines: ReviewDiffHunkLine[];
+}
+
+/** The bounded review record carried in a tool result's `details.review`. */
+export interface ReviewChangeRecord {
+  snapshotId: string;
+  sessionId: string;
+  path: string;
+  operation: "write" | "edit";
+  status: ReviewChangeStatus;
+  state: ReviewChangeState;
+  additions: number;
+  deletions: number;
+  hunks?: ReviewDiffHunk[];
+  reversible: boolean;
+  truncated: boolean;
+  capturedAt: string;
+}
+
+/** Rollback review mutation outcome. */
+export type RollbackReviewChangeResult =
+  | { kind: "rolledBack"; record: ReviewChangeRecord }
+  | { kind: "conflict"; detail: string }
+  | { kind: "notFound" }
+  | { kind: "unavailable"; detail: string };
+

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ASK_USER_TEXT_MAX_LENGTH, EXTENSION_DIALOG_TEXT_MAX_LENGTH, SESSION_NOTIFICATION_LIMIT, SESSION_NOTIFICATION_MESSAGE_BYTES, SESSION_UNREAD_CATALOG_ID_MAX_LENGTH } from "../../../shared/apiTypes";
-import { parseAskUserCloseResponse, parseAuthProvidersResponse, parseCommandResult, parseExtensionDialogCloseResponse, parseFileContentResponse, parseFileSuggestion, parseMachineRuntime, parseMessagePage, parseOAuthFlowState, parsePiPackageMutationResponse, parsePiPackagesResponse, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parsePiWebStatusResponse, parseRealtimeStreamEvent, parseSessionBulkArchiveResponse, parseSessionBulkDeleteArchivedResponse, parseSessionCleanupExecuteResponse, parseSessionCleanupPreviewResponse, parseSessionInfo, parseSessionModelCatalogResponse, parseSessionNotificationInboxEvent, parseSessionNotificationInboxSnapshot, parseSessionStartupProgressEvent, parseSessionStatus, parseSessionStreamSnapshot, parseSessionTreeForkResult, parseSessionTreeNavigateResult, parseSessionTreeSnapshot, parseSessionUnreadCatalogSnapshot, parseSessionUnreadEvent, parseSlashCommand, parseWorkspace, parseWorkspaceProviderResolution } from "./parsers";
+import { parseAskUserCloseResponse, parseAuthProvidersResponse, parseCommandResult, parseExtensionDialogCloseResponse, parseFileContentResponse, parseFileSuggestion, parseMachineRuntime, parseMessagePage, parseOAuthFlowState, parsePiPackageMutationResponse, parsePiPackagesResponse, parsePiWebConfigResponse, parsePiWebPluginsResponse, parsePiWebRuntimeResponse, parsePiWebStatusResponse, parseRealtimeStreamEvent, parseSessionBulkArchiveResponse, parseSessionBulkDeleteArchivedResponse, parseSessionCleanupExecuteResponse, parseSessionCleanupPreviewResponse, parseSessionInfo, parseSessionModelCatalogResponse, parseSessionNotificationInboxEvent, parseSessionNotificationInboxSnapshot, parseSessionStartupProgressEvent, parseSessionStatus, parseSessionStreamSnapshot, parseSessionTreeForkResult, parseSessionTreeNavigateResult, parseSessionTreeSnapshot, parseSessionUnreadCatalogSnapshot, parseSessionUnreadEvent, parseReviewChangeRecord, parseRollbackReviewResponse, parseSlashCommand, parseWorkspace, parseWorkspaceProviderResolution } from "./parsers";
 
 describe("API parsers", () => {
   it("preserves interactive API-key flow hints and defaults providers without one", () => {
@@ -1135,6 +1135,84 @@ describe("API parsers", () => {
     expect(() => parseExtensionDialogCloseResponse({ result: "closed", outcome: { ...outcome, reason: "timeout" }, sessionStatus: statusWire() })).toThrow("Dialog outcome answer mismatch");
     expect(() => parseExtensionDialogCloseResponse({ result: "closed", outcome: { ...outcome, answer: 1 }, sessionStatus: statusWire() })).toThrow("Invalid extension dialog answer");
     expect(() => parseExtensionDialogCloseResponse({ result: "closed", outcome: { ...outcome, reason: "ignored" }, sessionStatus: statusWire() })).toThrow("Invalid extension dialog close reason");
+  });
+
+  it("parses review change records and diff hunks", () => {
+    const raw = {
+      snapshotId: "snap-123",
+      sessionId: "session-456",
+      path: "src/file.ts",
+      operation: "write",
+      status: "modified",
+      state: "active",
+      additions: 3,
+      deletions: 1,
+      hunks: [
+        {
+          oldStart: 10,
+          newStart: 10,
+          lines: [
+            { kind: "context", oldLine: 10, newLine: 10, text: "const x = 1;" },
+            { kind: "remove", oldLine: 11, text: "const y = 2;" },
+            { kind: "add", newLine: 11, text: "const y = 3;" },
+          ],
+        },
+      ],
+      reversible: true,
+      truncated: false,
+      capturedAt: "2026-09-11T00:00:00.000Z",
+    };
+
+    const parsed = parseReviewChangeRecord(raw);
+    expect(parsed).toEqual(raw);
+
+    const truncatedRaw = {
+      ...raw,
+      hunks: undefined,
+      truncated: true,
+      reversible: false,
+    };
+    expect(parseReviewChangeRecord(truncatedRaw)).toEqual({
+      ...truncatedRaw,
+      hunks: undefined,
+    });
+
+    expect(() => parseReviewChangeRecord({ ...raw, operation: "invalid" })).toThrow("Invalid review operation");
+    expect(() => parseReviewChangeRecord({ ...raw, status: "unknown" })).toThrow("Invalid review status");
+    expect(() => parseReviewChangeRecord({ ...raw, state: "pending" })).toThrow("Invalid review state");
+  });
+
+  it("parses rollback review responses", () => {
+    const record = {
+      snapshotId: "snap-123",
+      sessionId: "session-456",
+      path: "src/file.ts",
+      operation: "edit" as const,
+      status: "modified" as const,
+      state: "rolledBack" as const,
+      additions: 0,
+      deletions: 1,
+      reversible: false,
+      truncated: false,
+      capturedAt: "2026-09-11T00:00:00.000Z",
+    };
+
+    expect(parseRollbackReviewResponse({ kind: "rolledBack", record })).toEqual({
+      kind: "rolledBack",
+      record,
+    });
+    expect(parseRollbackReviewResponse({ kind: "conflict", detail: "File modified on disk" })).toEqual({
+      kind: "conflict",
+      detail: "File modified on disk",
+    });
+    expect(parseRollbackReviewResponse({ kind: "notFound" })).toEqual({
+      kind: "notFound",
+    });
+    expect(parseRollbackReviewResponse({ kind: "unavailable", detail: "No backup exists" })).toEqual({
+      kind: "unavailable",
+      detail: "No backup exists",
+    });
+    expect(() => parseRollbackReviewResponse({ kind: "unknown" })).toThrow("Invalid rollback review response kind: unknown");
   });
 });
 

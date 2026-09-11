@@ -1,6 +1,9 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { parseReviewChangeRecord } from "../api/parsers";
 import { writeClipboardText } from "../clipboard";
+import { isSnapshotRolledBack, recordRolledBackSnapshot } from "../reviewState";
+import type { ReviewChangeRecord, ReviewDiffHunk, RollbackReviewChangeResult } from "../../../shared/apiTypes";
 import type { ToolExecutionPart } from "./shared";
 
 const MAX_COLLAPSED_DIFF_LINES = 180;
@@ -13,9 +16,14 @@ interface ToolTarget {
 @customElement("tool-execution-view")
 export class ToolExecutionView extends LitElement {
   @property({ attribute: false }) execution: ToolExecutionPart | undefined;
+  @property({ type: Boolean }) rolledBack = false;
+  @property({ attribute: false }) onRollbackReview?: (snapshotId: string) => Promise<RollbackReviewChangeResult | undefined>;
   @state() private showFullDiff = false;
   @state() private copied = false;
   @state() private diffOpen = true;
+  @state() private localRolledBack = false;
+  @state() private isRollingBack = false;
+  @state() private rollbackError: string | undefined;
 
   override render() {
     const execution = this.execution;
@@ -49,6 +57,7 @@ export class ToolExecutionView extends LitElement {
         ${previewMismatch ? html`<p class="notice">Applied diff differs from the preview.</p>` : null}
         ${errorText === undefined || errorText === "" ? null : html`<pre class="error-text">${errorText}</pre>`}
         ${visibleDiff === undefined ? this.renderTextBody(bodyText, execution.status === "error", target) : this.renderDiffBody(visibleDiff, actualDiff === undefined ? "Preview diff" : "Applied diff", target)}
+        ${this.renderReviewCard(execution)}
       </section>
     `;
   }
@@ -125,6 +134,119 @@ export class ToolExecutionView extends LitElement {
     window.setTimeout(() => { this.copied = false; }, 1200);
   }
 
+  private renderReviewCard(execution: ToolExecutionPart) {
+    if (execution.toolName !== "write" && execution.toolName !== "edit") return null;
+    const review = reviewFromDetails(execution.details);
+    if (review === undefined) return null;
+
+    const isRolledBack = this.rolledBack || this.localRolledBack || review.state === "rolledBack" || isSnapshotRolledBack(review.snapshotId);
+    const hunkCount = review.hunks?.length ?? 0;
+    const totalDiffLines = review.hunks?.reduce((acc, h) => acc + h.lines.length, 0) ?? 0;
+
+    return html`
+      <div class="review-card" data-snapshot-id=${review.snapshotId}>
+        <div class="review-header">
+          <div class="review-title">
+            <span class="review-badge">Review</span>
+            <span class="review-path" title=${review.path} aria-label=${`File: ${review.path}`}>${review.path}</span>
+            <span class=${`review-status-badge ${review.status}`}>${review.status}</span>
+          </div>
+          <div class="review-actions">
+            <span class="diff-stats">
+              <b class="added">+${String(review.additions)}</b>
+              <span>/</span>
+              <b class="removed">−${String(review.deletions)}</b>
+            </span>
+            ${this.renderRollbackButton(review, isRolledBack)}
+          </div>
+        </div>
+
+        ${review.truncated ? html`<p class="review-notice">内容过大，未保存 diff / 不可回滚</p>` : null}
+        ${this.rollbackError !== undefined ? html`<p class="review-error" role="alert">${this.rollbackError}</p>` : null}
+
+        ${review.hunks !== undefined && review.hunks.length > 0 ? html`
+          <details class="review-hunks-details">
+            <summary>
+              <span>Changes</span>
+              <small>${String(totalDiffLines)} ${totalDiffLines === 1 ? "line" : "lines"}${hunkCount > 1 ? ` (${String(hunkCount)} hunks)` : ""}</small>
+            </summary>
+            <div class="review-hunk-lines">
+              ${review.hunks.map((hunk) => this.renderHunk(hunk))}
+            </div>
+          </details>
+        ` : null}
+      </div>
+    `;
+  }
+
+  private renderRollbackButton(review: ReviewChangeRecord, isRolledBack: boolean) {
+    if (isRolledBack) {
+      return html`<button type="button" class="rollback-button" disabled>Rolled back</button>`;
+    }
+    if (this.isRollingBack) {
+      return html`<button type="button" class="rollback-button" disabled>Rolling back...</button>`;
+    }
+    if (!review.reversible) {
+      return html`<button type="button" class="rollback-button" disabled title="Rollback unavailable">Rollback</button>`;
+    }
+    return html`<button type="button" class="rollback-button" @click=${() => { void this.handleRollback(review); }}>Rollback</button>`;
+  }
+
+  private renderHunk(hunk: ReviewDiffHunk) {
+    return html`
+      <div class="review-hunk">
+        <div class="review-hunk-header">@@ -${String(hunk.oldStart)} +${String(hunk.newStart)} @@</div>
+        ${hunk.lines.map((line) => {
+          const marker = line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " ";
+          return html`
+            <div class=${`review-line ${line.kind}`}>
+              <span class="line-num old-num">${line.oldLine !== undefined ? String(line.oldLine) : ""}</span>
+              <span class="line-num new-num">${line.newLine !== undefined ? String(line.newLine) : ""}</span>
+              <span class="line-marker">${marker}</span>
+              <span class="line-text">${line.text}</span>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private async handleRollback(review: ReviewChangeRecord): Promise<void> {
+    if (this.isRollingBack) return;
+    if (typeof window !== "undefined" && typeof window.confirm === "function") {
+      const confirmed = window.confirm(`Roll back changes to ${review.path}?`);
+      if (!confirmed) return;
+    }
+    const callback = this.onRollbackReview;
+    if (callback === undefined) return;
+    this.isRollingBack = true;
+    this.rollbackError = undefined;
+    try {
+      const result = await callback(review.snapshotId);
+      if (result !== undefined) {
+        switch (result.kind) {
+          case "rolledBack":
+            this.localRolledBack = true;
+            recordRolledBackSnapshot(review.snapshotId);
+            break;
+          case "conflict":
+            this.rollbackError = result.detail !== "" ? `Conflict: ${result.detail}` : "Rollback conflict";
+            break;
+          case "unavailable":
+            this.rollbackError = result.detail !== "" ? `Unavailable: ${result.detail}` : "Rollback unavailable";
+            break;
+          case "notFound":
+            this.rollbackError = "Snapshot not found";
+            break;
+        }
+      }
+    } catch (error) {
+      this.rollbackError = error instanceof Error ? error.message : "Rollback failed";
+    } finally {
+      this.isRollingBack = false;
+    }
+  }
+
   static override styles = css`
     :host { display: block; width: 100%; max-width: 100%; min-width: 0; color: var(--pi-text); }
     .tool-card { display: grid; gap: 8px; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; border: 1px solid var(--pi-border); border-radius: 8px; background: var(--pi-bg); padding: 9px; color: var(--pi-text); }
@@ -169,6 +291,34 @@ export class ToolExecutionView extends LitElement {
     .diff .added { background: color-mix(in srgb, var(--pi-success) 12%, transparent); }
     .diff .removed { background: color-mix(in srgb, var(--pi-danger) 12%, transparent); }
     .show-more { justify-self: start; }
+    .review-card { display: grid; gap: 8px; margin-top: 8px; border: 1px solid var(--pi-border-muted); border-radius: 7px; background: var(--pi-surface, rgba(0, 0, 0, 0.02)); padding: 8px 10px; }
+    .review-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .review-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
+    .review-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 4px; background: var(--pi-surface-muted, var(--pi-border)); color: var(--pi-muted); }
+    .review-path { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--pi-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .review-status-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; }
+    .review-status-badge.added { color: var(--pi-success); background: color-mix(in srgb, var(--pi-success) 14%, transparent); }
+    .review-status-badge.modified { color: var(--pi-accent); background: color-mix(in srgb, var(--pi-accent) 14%, transparent); }
+    .review-status-badge.deleted { color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 14%, transparent); }
+    .review-actions { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+    .rollback-button { border: 1px solid var(--pi-border); border-radius: 6px; background: var(--pi-surface); color: var(--pi-text); padding: 3px 8px; font: 12px system-ui, sans-serif; cursor: pointer; }
+    .rollback-button:hover:not(:disabled) { border-color: var(--pi-accent); }
+    .rollback-button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .review-notice { margin: 0; color: var(--pi-warning); font-size: 12px; }
+    .review-error { margin: 0; border: 1px solid var(--pi-danger); border-radius: 6px; background: color-mix(in srgb, var(--pi-danger) 10%, var(--pi-bg)); color: var(--pi-danger); padding: 6px 8px; font-size: 12px; }
+    .review-hunks-details { border-top: 1px solid var(--pi-border-muted); padding-top: 6px; }
+    .review-hunks-details > summary { color: var(--pi-muted); cursor: pointer; font-size: 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .review-hunk-lines { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 8px 0 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; border: 1px solid var(--pi-border-muted); border-radius: 6px; background: var(--pi-bg); padding: 6px 0; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45; }
+    .review-hunk { display: grid; }
+    .review-hunk:not(:first-child) { margin-top: 6px; border-top: 1px dashed var(--pi-border-muted); padding-top: 6px; }
+    .review-hunk-header { padding: 2px 8px; color: var(--pi-accent); font-size: 11px; user-select: none; }
+    .review-line { display: flex; min-height: 1.45em; padding: 0 8px; white-space: pre; }
+    .review-line.context { color: var(--pi-muted); }
+    .review-line.add { color: var(--pi-success); background: color-mix(in srgb, var(--pi-success) 12%, transparent); }
+    .review-line.remove { color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 12%, transparent); }
+    .review-line .line-num { display: inline-block; width: 32px; text-align: right; padding-right: 6px; color: var(--pi-dim); user-select: none; font-size: 11px; flex: 0 0 auto; }
+    .review-line .line-marker { display: inline-block; width: 14px; text-align: center; user-select: none; flex: 0 0 auto; }
+    .review-line .line-text { flex: 1 1 auto; white-space: pre; }
   `;
 }
 
@@ -249,3 +399,15 @@ function getString(value: unknown, key: string): string | undefined {
   const property = getProperty(value, key);
   return typeof property === "string" ? property : undefined;
 }
+
+function reviewFromDetails(details: unknown): ReviewChangeRecord | undefined {
+  if (!isRecord(details)) return undefined;
+  const review = details["review"];
+  if (!isRecord(review)) return undefined;
+  try {
+    return parseReviewChangeRecord(review);
+  } catch {
+    return undefined;
+  }
+}
+

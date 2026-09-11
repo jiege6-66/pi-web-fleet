@@ -1,4 +1,5 @@
-import { api as defaultApi, type AskUserCloseResponse, type AskUserSubmission, type CommandResult, type ExtensionDialogAnswer, type ExtensionDialogCloseReason, type ExtensionDialogCloseResponse, type ExtensionDialogOutcome, type MessagePage, type PendingAskUser, type PendingExtensionDialog, type PromptAttachment, type QueuedSessionMessage, type SessionActivity, type SessionBulkFailure, type SessionCleanupExecuteResponse, type SessionInfo, type SessionModelCatalogEntry, type SessionModelScopeMode, type SessionRef, type SessionStatus, type SessionStreamSnapshot, type SessionTreeForkResult, type SessionTreeNavigateResult, type SessionTreeSummaryChoice, type Workspace } from "../api";
+import { api as defaultApi, type AskUserCloseResponse, type AskUserSubmission, type CommandResult, type ExtensionDialogAnswer, type ExtensionDialogCloseReason, type ExtensionDialogCloseResponse, type ExtensionDialogOutcome, type MessagePage, type PendingAskUser, type PendingExtensionDialog, type PromptAttachment, type QueuedSessionMessage, type RollbackReviewChangeResult, type SessionActivity, type SessionBulkFailure, type SessionCleanupExecuteResponse, type SessionInfo, type SessionModelCatalogEntry, type SessionModelScopeMode, type SessionRef, type SessionStatus, type SessionStreamSnapshot, type SessionTreeForkResult, type SessionTreeNavigateResult, type SessionTreeSummaryChoice, type Workspace } from "../api";
+import { recordRolledBackSnapshot } from "../reviewState";
 import type { AppState, ClosedExtensionDialog } from "../appState";
 import { BrowserErrorReporter, sessionBrowserErrorScope, workspaceBrowserErrorScope, type SessionBrowserErrorOwner } from "../browserErrors";
 import { forgetCachedNewSession, isCachedNewSessionInfo, markCachedNewSessionInfo, mergeCachedNewSessions, rememberCachedNewSession, stripCachedNewSessionMarker } from "../cachedNewSessions";
@@ -1164,6 +1165,54 @@ export class SessionController {
     return this.closeOpenDialog(dialogId, (session, machineId) => this.api.cancelDialog(session, dialogId, machineId));
   }
 
+  /** Roll back a captured file change to its pre-tool bytes. */
+  async rollbackReview(snapshotId: string): Promise<RollbackReviewChangeResult> {
+    const state = this.getState();
+    const session = state.selectedSession;
+    if (session === undefined || session.archived === true) {
+      return { kind: "unavailable", detail: "No active session selected" };
+    }
+    const machineId = selectedMachineId(state);
+    try {
+      const result = await this.api.rollbackReview(session, snapshotId, machineId);
+      if (result.kind === "rolledBack") {
+        recordRolledBackSnapshot(snapshotId);
+        this.markReviewRolledBackInMessages(snapshotId);
+      }
+      return result;
+    } catch (error) {
+      return { kind: "unavailable", detail: errorMessage(error) };
+    }
+  }
+
+  private markReviewRolledBackInMessages(snapshotId: string): void {
+    const state = this.getState();
+    const hasMatchingReview = state.messages.some((line) =>
+      line.parts.some((part) => part.type === "toolExecution" && isRecord(part.details) && isRecord(part.details["review"]) && part.details["review"]["snapshotId"] === snapshotId)
+    );
+    if (!hasMatchingReview) return;
+
+    const nextMessages = state.messages.map((line) => {
+      const parts = line.parts.map((part) => {
+        if (part.type !== "toolExecution" || !isRecord(part.details)) return part;
+        const review = part.details["review"];
+        if (!isRecord(review) || review["snapshotId"] !== snapshotId) return part;
+        return {
+          ...part,
+          details: {
+            ...part.details,
+            review: {
+              ...review,
+              state: "rolledBack",
+            },
+          },
+        };
+      });
+      return { ...line, parts };
+    });
+    this.setState({ messages: nextMessages });
+  }
+
   private async closeOpenDialog(dialogId: string, close: (session: SessionInfo, machineId: string) => Promise<ExtensionDialogCloseResponse>): Promise<void> {
     const state = this.getState();
     const session = state.selectedSession;
@@ -2308,3 +2357,6 @@ function isSessionNotFoundError(error: unknown): boolean {
   return error instanceof Error && error.message.toLowerCase().includes("session not found");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}

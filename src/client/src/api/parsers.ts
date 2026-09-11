@@ -1,6 +1,6 @@
 import { PI_WEB_PLUGIN_LIFECYCLE_VERSION, ASK_USER_ID_MAX_LENGTH, ASK_USER_OPTION_LIMIT, ASK_USER_OTHER_TEXT_MAX_LENGTH, ASK_USER_QUESTION_LIMIT, ASK_USER_TEXT_MAX_LENGTH, EXTENSION_DIALOG_ID_MAX_LENGTH, EXTENSION_DIALOG_INPUT_MAX_LENGTH, EXTENSION_DIALOG_OPTION_LIMIT, EXTENSION_DIALOG_TEXT_MAX_LENGTH, SESSION_NOTIFICATION_LIMIT, SESSION_NOTIFICATION_MESSAGE_BYTES, SESSION_UNREAD_CATALOG_ID_MAX_LENGTH, SESSION_UNREAD_COMPLETED_AT_MAX_LENGTH, SESSION_UNREAD_CWD_MAX_LENGTH, SESSION_UNREAD_LIMIT, SESSION_UNREAD_SESSION_ID_MAX_LENGTH, type ArchiveSessionsResponse, type AskUserCloseReason, type AskUserCloseResponse, type AskUserOutcome, type AskUserQuestion, type AskUserQuestionOption, type AskUserQuestionRecord, type PendingAskUser, type PendingExtensionDialog, type AuthProviderOption, type AuthProviderStatus, type AuthProvidersResponse, type AuthStatusSource, type AuthType, type CommandOption, type CommandResult, type DeleteWorkspaceFileResponse, type ExtensionDialogAnswer, type ExtensionDialogCloseReason, type ExtensionDialogCloseResponse, type ExtensionDialogKind, type ExtensionDialogOutcome, type FileContentResponse, type FileSuggestion, type FileTreeEntry, type FileTreeResponse, type GlobalSessionEvent, type Machine, type MachineHealth, type MachineKind, type MachineRuntime, type MachineStatus, type MessagePage, type ModelSelectionResponse, type MoveWorkspaceFileResponse, type OAuthFlowState, type PiWebCapability, type PiWebComponentStatus, type PiWebConfigEnvOverrides, type PiWebConfigResponse, type PiWebConfigValues, type PiWebDeprecatedAgentInput, type PiWebInstallationInfo, type PiWebPluginConfigMap, type PiWebPluginInfo, type PiWebPluginsResponse, type PiWebPluginScope, type PiWebReleaseStatus, type PiWebRuntimeComponent, type PiWebRuntimeResponse, type PiWebServiceComponent, type PiWebShortcutConfig, type PiWebStatusMessage, type PiWebStatusResponse, type PiWebStatusSeverity, type Project, type QueuedSessionMessage, type SavedPromptAttachment, type SessionBulkArchiveResponse, type SessionBulkDeleteArchivedResponse, type SessionBulkFailure, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupProjectSummary, type SessionCleanupThresholds, type SessionCleanupTotals, type SessionInfo, type SessionModel, type SessionModelCatalogEntry, type SessionModelCatalogResponse, type SessionNotification, type SessionNotificationClearReason, type SessionNotificationDismissThrough, type SessionNotificationInboxDelta, type SessionNotificationInboxEvent, type SessionNotificationInboxSnapshot, type SessionNotificationSeverity, type SessionNotificationSummary, type ServerNotice, type ServerNoticeEvent, type ServerNoticeSeverity, type ServerNoticeSnapshot, type SessionStatus, type SessionStreamSnapshot, type SessionUiEvent, type SessionUnreadCatalogSnapshot, type SessionUnreadEvent, type SessionUnreadSummary, type SessionWarning, type SessionWarningSeverity, type SlashCommand, type ThinkingLevelsResponse, type WriteWorkspaceFileResponse, type Workspace, type WorkspaceEffectiveConfig, type WorkspaceTrustResponse } from "../../../shared/apiTypes";
 import { parseMachineStatusSnapshot, type MachineStatusSnapshot, type MachineStatusUiEvent } from "../../../shared/machineStatus";
-import type { JsonValue, PiPackageInfo, PiPackageInstallableSuggestion, PiPackageMutationAction, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse, SessionActivity, SessionStartupProgressEvent, SessionTreeForkResult, SessionTreeNavigateResult, SessionTreeNode, SessionTreeNodeKind, SessionTreeSnapshot, WorkspaceProviderDiagnostic, WorkspaceProviderDiagnosticCode, WorkspaceProviderResolution, WorkspaceProviderResolutionStatus, WorkspaceProviderTier } from "../../../shared/apiTypes";
+import type { JsonValue, PiPackageInfo, PiPackageInstallableSuggestion, PiPackageMutationAction, PiPackageMutationResponse, PiPackageScope, PiPackagesResponse, ReviewChangeRecord, ReviewDiffHunk, ReviewDiffHunkLine, RollbackReviewChangeResult, SessionActivity, SessionStartupProgressEvent, SessionTreeForkResult, SessionTreeNavigateResult, SessionTreeNode, SessionTreeNodeKind, SessionTreeSnapshot, WorkspaceProviderDiagnostic, WorkspaceProviderDiagnosticCode, WorkspaceProviderResolution, WorkspaceProviderResolutionStatus, WorkspaceProviderTier } from "../../../shared/apiTypes";
 
 import { parseKnownPiWebCapabilities } from "../../../shared/capabilities";
 import { parseDeprecatedAgentInputs } from "../../../shared/piWebStatusParsing";
@@ -2110,3 +2110,74 @@ function numberOrNull(record: Record<string, unknown>, key: string): number | nu
 function optionalField(key: string, value: unknown): object {
   return value === undefined ? {} : { [key]: value };
 }
+
+export function parseReviewDiffHunkLine(value: unknown): ReviewDiffHunkLine {
+  const record = requireRecord(value);
+  const kind = requireString(record, "kind");
+  if (kind !== "context" && kind !== "add" && kind !== "remove") throw new Error("Invalid review hunk line kind");
+  return {
+    kind,
+    ...optionalField("oldLine", optionalNumber(record, "oldLine")),
+    ...optionalField("newLine", optionalNumber(record, "newLine")),
+    text: requireString(record, "text"),
+  };
+}
+
+export function parseReviewDiffHunk(value: unknown): ReviewDiffHunk {
+  const record = requireRecord(value);
+  const oldStart = requireNumber(record, "oldStart");
+  const newStart = requireNumber(record, "newStart");
+  const lines = arrayOf(parseReviewDiffHunkLine)(record["lines"]);
+  return { oldStart, newStart, lines };
+}
+
+export function parseReviewChangeRecord(value: unknown): ReviewChangeRecord {
+  const record = requireRecord(value);
+  const snapshotId = requireString(record, "snapshotId");
+  const sessionId = requireString(record, "sessionId");
+  const path = requireString(record, "path");
+  const operation = requireString(record, "operation");
+  if (operation !== "write" && operation !== "edit") throw new Error("Invalid review operation");
+  const status = requireString(record, "status");
+  if (status !== "added" && status !== "modified" && status !== "deleted") throw new Error("Invalid review status");
+  const state = requireString(record, "state");
+  if (state !== "active" && state !== "rolledBack") throw new Error("Invalid review state");
+  const additions = requireNumber(record, "additions");
+  const deletions = requireNumber(record, "deletions");
+  const hunks = record["hunks"] === undefined ? undefined : arrayOf(parseReviewDiffHunk)(record["hunks"]);
+  const reversible = requireBoolean(record, "reversible");
+  const truncated = requireBoolean(record, "truncated");
+  const capturedAt = requireString(record, "capturedAt");
+  return {
+    snapshotId,
+    sessionId,
+    path,
+    operation,
+    status,
+    state,
+    additions,
+    deletions,
+    ...(hunks === undefined ? {} : { hunks }),
+    reversible,
+    truncated,
+    capturedAt,
+  };
+}
+
+export function parseRollbackReviewResponse(value: unknown): RollbackReviewChangeResult {
+  const record = requireRecord(value);
+  const kind = requireString(record, "kind");
+  switch (kind) {
+    case "rolledBack":
+      return { kind: "rolledBack", record: parseReviewChangeRecord(record["record"]) };
+    case "conflict":
+      return { kind: "conflict", detail: requireString(record, "detail") };
+    case "notFound":
+      return { kind: "notFound" };
+    case "unavailable":
+      return { kind: "unavailable", detail: requireString(record, "detail") };
+    default:
+      throw new Error(`Invalid rollback review response kind: ${kind}`);
+  }
+}
+

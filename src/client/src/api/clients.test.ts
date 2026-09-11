@@ -364,6 +364,35 @@ describe("session API compatibility", () => {
     expect(JSON.parse(requestBody(cancelInit))).toEqual({ cwd: "/repo with spaces", dialogId: "dialog 1" });
   });
 
+  it("posts review rollback through an encoded cwd-scoped machine route", async () => {
+    const rolledBackRecord = {
+      snapshotId: "snap-1",
+      sessionId: "s /?",
+      path: "rollback-me.txt",
+      operation: "write" as const,
+      status: "modified" as const,
+      state: "rolledBack" as const,
+      additions: 1,
+      deletions: 2,
+      reversible: false,
+      truncated: false,
+      capturedAt: "2026-09-11T00:00:00.000Z",
+    };
+    const fetchMock = stubJsonFetch({ kind: "rolledBack", record: rolledBackRecord });
+    const ref = { id: "s /?", cwd: "/repo with spaces" };
+
+    await expect(sessionsApi.rollbackReview(ref, "snap-1", "remote /?")).resolves.toEqual({
+      kind: "rolledBack",
+      record: rolledBackRecord,
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchCall(fetchMock, 0);
+    expect(url).toBe("https://pi.example.test/api/machines/remote%20%2F%3F/sessions/s%20%2F%3F/review/rollback");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(requestBody(init))).toEqual({ cwd: "/repo with spaces", snapshotId: "snap-1" });
+  });
+
   it("posts session tree navigation through an encoded cwd-scoped machine route", async () => {
     const fetchMock = stubJsonFetch({ cancelled: false, editorText: "edit this" });
     const navigation = { targetId: "entry /?", expectedLeafId: "leaf-1", summary: { mode: "custom" as const, instructions: "focus on tests" } };
