@@ -33,6 +33,8 @@ export interface SessionServiceDependencyInput {
   appendSystemPromptSections: readonly string[];
   /** Auto-cancel delay for extension dialogs whose extension set no timeout; `0` waits forever. */
   extensionDialogsTimeoutMs: number;
+  /** Review-store data dir (the store appends `review-changes/<sessionId>`); enables write/edit review capture. */
+  reviewDataDir: string;
 }
 
 /**
@@ -59,6 +61,7 @@ export function sessionServiceDependencies(input: SessionServiceDependencyInput)
     askUserEnabled: input.askUserEnabled,
     appendSystemPromptSections: input.appendSystemPromptSections,
     extensionDialogsTimeoutMs: input.extensionDialogsTimeoutMs,
+    reviewDataDir: input.reviewDataDir,
     notificationStore: input.notificationStore,
     unreadStore: input.unreadStore,
     onUnreadChanged: input.onUnreadChanged,

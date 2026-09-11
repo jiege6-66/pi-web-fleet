@@ -31,7 +31,7 @@ import {
 import { sessiondSocketPath } from "../sessiond/config.js";
 import { getPiWebRuntimeComponent } from "./piWebStatus.js";
 import { SESSIOND_RUNTIME_CAPABILITIES } from "../shared/capabilities.js";
-import { agentSessionDirEnvOverride, effectivePiWebConfig, maxUploadBytes, offlineModeEnabled, PI_CODING_AGENT_DIR_ENV, PI_CODING_AGENT_SESSION_DIR_ENV } from "../config.js";
+import { agentSessionDirEnvOverride, effectivePiWebConfig, maxUploadBytes, offlineModeEnabled, piWebDataDir, PI_CODING_AGENT_DIR_ENV, PI_CODING_AGENT_SESSION_DIR_ENV } from "../config.js";
 import { createFilePiWebConfigService } from "./configRoutes.js";
 import { createActiveAgentProfileDescriptor } from "../sessiond/activeAgentProfile.js";
 import { loadServerPluginRecoveryConfig } from "../serverPluginRecovery.js";
@@ -290,6 +290,9 @@ async function createSessionDaemonRuntime() {
         }),
       ],
       extensionDialogsTimeoutMs: config.extensionDialogsTimeoutMs,
+      // Review-store root; the store appends its own `review-changes/<sessionId>`
+      // segments beneath the daemon data dir.
+      reviewDataDir: piWebDataDir(daemonEnvironment),
       notificationStore,
       unreadStore,
       onUnreadChanged: () => { machineStatus.notifyChanged(); },

@@ -57,6 +57,7 @@ describe("delegation tool capability boundary", () => {
 
     expect(toolNames(createPiWebCustomToolDefinitions("/workspace", true, spawn, subsessions))).toEqual([
       "edit",
+      "write",
       "spawn_session",
       "spawn_subsession",
       "list_subsessions",
@@ -69,14 +70,14 @@ describe("delegation tool capability boundary", () => {
   it("continues to honor global delegation feature flags for unrestricted sessions", () => {
     const { spawn } = delegationDeps();
 
-    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", true, spawn))).toEqual(["edit", "spawn_session"]);
-    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", true))).toEqual(["edit"]);
+    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", true, spawn))).toEqual(["edit", "write", "spawn_session"]);
+    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", true))).toEqual(["edit", "write"]);
   });
 
   it("removes every delegation tool but retains ordinary tools for restricted tracked children", () => {
     const { spawn, subsessions } = delegationDeps();
 
-    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", false, spawn, subsessions))).toEqual(["edit"]);
+    expect(toolNames(createPiWebCustomToolDefinitions("/workspace", false, spawn, subsessions))).toEqual(["edit", "write"]);
   });
 
   it("wires the dispatching session identity, inherited model, and model spec into spawn_session", async () => {

@@ -30,6 +30,7 @@ function daemonCollaborators(patch: Partial<SessionServiceDependencyInput> = {})
     askUserEnabled: true,
     appendSystemPromptSections: [],
     extensionDialogsTimeoutMs: 300_000,
+    reviewDataDir: "/tmp/pi-web-test-review",
     ...patch,
   };
 }

@@ -1,13 +1,14 @@
 import { statSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type { AgentToolResult, StreamFn } from "@earendil-works/pi-agent-core";
 import {
   createAgentSessionFromServices,
   createAgentSessionRuntime,
   createAgentSessionServices,
   createEditToolDefinition,
+  createWriteToolDefinition,
   defineTool,
   hasTrustRequiringProjectResources,
   ProjectTrustStore,
@@ -39,6 +40,15 @@ import { findArchiveCandidateByIdOrPrefix, planSessionArchiveTree, type SessionA
 import type { ActiveSession } from "./sessionRuntimeStore.js";
 import { deterministicSessionName, fallbackSessionName, generateShortSessionName } from "./sessionNameGenerator.js";
 import { computeEditPreview, type EditPreviewResult } from "./editPreview.js";
+import {
+  finalizeReviewChange,
+  prepareReviewChange,
+  rollbackReviewChange,
+  removeSessionReviewStore,
+  type PendingReviewChange,
+  type ReviewChangeRecord,
+  type RollbackReviewChangeResult,
+} from "./reviewStore.js";
 import { attachmentsToInlineImages, saveAttachmentsToWorkspace } from "./attachmentService.js";
 import { loadEffectiveProjectAttachmentsConfig } from "../workspaces/projectPiWebConfig.js";
 import type { PiWebConfigService } from "../configRoutes.js";
@@ -760,9 +770,11 @@ export function createPiWebCustomToolDefinitions(
   spawn?: SpawnSessionFn,
   subsessions?: SubsessionToolDeps,
   askUser?: AskUserToolDeps,
+  reviewDeps?: ReviewCaptureDeps,
 ) {
   return [
-    createPiWebEditToolDefinition(cwd),
+    createPiWebEditToolDefinition(cwd, reviewDeps),
+    createPiWebWriteToolDefinition(cwd, reviewDeps),
     ...(delegationEnabled && spawn !== undefined ? [createSpawnSessionToolDefinition(cwd, { spawn })] : []),
     ...(delegationEnabled && subsessions !== undefined ? createSubsessionToolDefinitions(cwd, subsessions) : []),
     // Asking the user is not delegation: the questions land in the session the
@@ -965,6 +977,7 @@ function createDefaultRuntimeFactory(
   subsessions?: SubsessionToolDeps,
   askUser?: AskUserToolDeps,
   appendSystemPromptSections: readonly string[] = [],
+  reviewDataDir?: string,
 ): PiWebCreateAgentSessionRuntimeFactory {
   const resourceLoaderOptions = piWebResourceLoaderOptions(appendSystemPromptSections);
   return async ({ cwd, agentDir, sessionManager, sessionStartEvent, initialModel, initialThinkingLevel, delegationToolsEnabled }) => {
@@ -1014,7 +1027,14 @@ function createDefaultRuntimeFactory(
     services.diagnostics.push(...modelOptions.diagnostics);
     const resolvedDelegationToolsEnabled = delegationToolsEnabled
       ?? await sessionAllowsDelegationTools(sessionManager, sessionManagers);
-    const customTools = createPiWebCustomToolDefinitions(cwd, resolvedDelegationToolsEnabled, spawn, subsessions, askUser);
+    // Review snapshots are session-owned: the capture helpers need the owning
+    // session id, the workspace root for display paths, and the review store
+    // root under the daemon data dir. Absent a data dir (tests), capture is
+    // off and the tools keep stock behavior.
+    const reviewDeps: ReviewCaptureDeps | undefined = reviewDataDir === undefined
+      ? undefined
+      : { dataDir: reviewDataDir, sessionId: sessionManager.getSessionId(), workspaceRoot: cwd };
+    const customTools = createPiWebCustomToolDefinitions(cwd, resolvedDelegationToolsEnabled, spawn, subsessions, askUser, reviewDeps);
     const result = await createAgentSessionFromServices({
       services,
       sessionManager,
@@ -1028,9 +1048,82 @@ function createDefaultRuntimeFactory(
   };
 }
 
-type PiWebEditToolDetails = EditToolDetails | { preview: EditPreviewResult } | undefined;
+type PiWebEditToolDetails = (EditToolDetails & ReviewStamp) | ({ preview: EditPreviewResult } & ReviewStamp) | ReviewStamp | undefined;
 
-function createPiWebEditToolDefinition(cwd: string) {
+type PiWebWriteToolDetails = ReviewStamp | undefined;
+
+/** The optional review record both wrapped tools may attach to their result. */
+interface ReviewStamp {
+  review?: ReviewChangeRecord;
+}
+
+/** Details type shared by both wrapped tools (edit and write). */
+type PiWebReviewableToolDetails = PiWebEditToolDetails | PiWebWriteToolDetails;
+
+/** Per-session collaborators the review capture needs; undefined disables capture. */
+interface ReviewCaptureDeps {
+  dataDir: string;
+  sessionId: string;
+  /** Directory the record's display path is computed against. */
+  workspaceRoot: string;
+}
+
+/** Resolve a tool path the same way the preview does: absolute or cwd-relative. */
+function resolveToolPath(cwd: string, path: string): string {
+  return isAbsolute(path) ? path : resolve(cwd, path);
+}
+
+/**
+ * Capture the pre-tool bytes of `filePath`; `undefined` (capture failed or is
+ * disabled) leaves the tool to run without a review record — a storage
+ * failure must never block the user's tool.
+ */
+async function prepareReviewCapture(
+  deps: ReviewCaptureDeps | undefined,
+  operation: "write" | "edit",
+  filePath: string,
+): Promise<PendingReviewChange | undefined> {
+  if (deps === undefined) return undefined;
+  try {
+    return await prepareReviewChange({
+      dataDir: deps.dataDir,
+      sessionId: deps.sessionId,
+      operation,
+      filePath,
+      workspaceRoot: deps.workspaceRoot,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * After the tool settled, record what it left on disk and merge the record
+ * into the result's `details.review` (the browser reads it from there).
+ * Never throws: a failed finalize leaves the tool result untouched.
+ */
+async function withReviewRecord(
+  result: AgentToolResult<PiWebReviewableToolDetails>,
+  deps: ReviewCaptureDeps | undefined,
+  pending: PendingReviewChange | undefined,
+  filePath: string,
+): Promise<AgentToolResult<PiWebReviewableToolDetails>> {
+  if (deps === undefined || pending === undefined) return result;
+  try {
+    const nextBytes: Buffer | undefined = await readFile(filePath).catch(() => undefined);
+    const finalized = await finalizeReviewChange(deps.dataDir, pending, nextBytes);
+    if (finalized.kind !== "record") return result;
+    const prior = result.details;
+    const details: PiWebReviewableToolDetails = prior === undefined
+      ? { review: finalized.record }
+      : { ...prior, review: finalized.record };
+    return { ...result, details };
+  } catch {
+    return result;
+  }
+}
+
+function createPiWebEditToolDefinition(cwd: string, reviewDeps: ReviewCaptureDeps | undefined) {
   const editTool = createEditToolDefinition(cwd);
   return defineTool<typeof editTool.parameters, PiWebEditToolDetails>({
     name: editTool.name,
@@ -1047,7 +1140,37 @@ function createPiWebEditToolDefinition(cwd: string) {
       if (signal?.aborted !== true) {
         onUpdate?.({ content: [{ type: "text", text: "Edit preview computed." }], details: { preview } });
       }
-      return editTool.execute(toolCallId, params, signal, onUpdate, ctx);
+      const filePath = resolveToolPath(cwd, params.path);
+      const pending = await prepareReviewCapture(reviewDeps, "edit", filePath);
+      const result = await editTool.execute(toolCallId, params, signal, onUpdate, ctx);
+      return withReviewRecord(result, reviewDeps, pending, filePath);
+    },
+  });
+}
+
+/**
+ * PI WEB's write tool: identical to pi's own, plus the review snapshot that
+ * makes each message's file change inspectable and safely revertible.
+ * `undefined` reviewDeps (tests, or a daemon without a data dir) keeps the
+ * stock behavior.
+ */
+function createPiWebWriteToolDefinition(cwd: string, reviewDeps: ReviewCaptureDeps | undefined) {
+  const writeTool = createWriteToolDefinition(cwd);
+  return defineTool<typeof writeTool.parameters, PiWebWriteToolDetails>({
+    name: writeTool.name,
+    label: writeTool.label,
+    description: writeTool.description,
+    ...(writeTool.promptSnippet === undefined ? {} : { promptSnippet: writeTool.promptSnippet }),
+    ...(writeTool.promptGuidelines === undefined ? {} : { promptGuidelines: writeTool.promptGuidelines }),
+    parameters: writeTool.parameters,
+    ...(writeTool.renderShell === undefined ? {} : { renderShell: writeTool.renderShell }),
+    ...(writeTool.prepareArguments === undefined ? {} : { prepareArguments: writeTool.prepareArguments }),
+    ...(writeTool.executionMode === undefined ? {} : { executionMode: writeTool.executionMode }),
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const filePath = resolveToolPath(cwd, params.path);
+      const pending = await prepareReviewCapture(reviewDeps, "write", filePath);
+      const result = await writeTool.execute(toolCallId, params, signal, onUpdate, ctx);
+      return withReviewRecord(result, reviewDeps, pending, filePath);
     },
   });
 }
@@ -1085,6 +1208,14 @@ export interface PiSessionServiceDependencies {
    * it with container environment facts in Docker deployments.
    */
   appendSystemPromptSections?: readonly string[];
+  /**
+   * Review-store root directory (the daemon data dir; the store appends
+   * `review-changes/<sessionId>` beneath it). When provided, workspace
+   * `write`/`edit` tool runs capture pre-tool snapshots and carry
+   * `details.review` records; session deletion removes the store.
+   * Omitted in tests, which keeps the stock tools.
+   */
+  reviewDataDir?: string;
   /** Daemon-lifetime open-ask state; defaults to an in-memory store in tests. */
   pendingAskStore?: PendingAskStore;
   /** Daemon-lifetime open-dialog state; defaults to an in-memory store in tests. */
@@ -1202,6 +1333,11 @@ export class PiSessionService implements SessionRouteService {
   private readonly dialogWaiters = new ExtensionDialogWaiters();
   private readonly catalogRefreshStatus: CatalogRefreshStatus | undefined;
   private readonly config: Pick<PiWebConfigService, "read"> | undefined;
+  /**
+   * Review-store root (`<dataDir>/review-changes`); undefined disables review
+   * capture (tests / daemons without a data dir).
+   */
+  private readonly reviewDataDir: string | undefined;
   private readonly unreadPublicationRetryInitialMs: number;
   private readonly onUnreadChanged: (() => void) | undefined;
   private readonly pendingUnreadMutations: SessionUnreadMutation[] = [];
@@ -1228,6 +1364,7 @@ export class PiSessionService implements SessionRouteService {
     this.extensionDialogsTimeoutMs = deps.extensionDialogsTimeoutMs ?? DEFAULT_EXTENSION_DIALOGS_TIMEOUT_MS;
     this.catalogRefreshStatus = deps.catalogRefreshStatus;
     this.config = deps.config;
+    this.reviewDataDir = deps.reviewDataDir;
     this.unreadPublicationRetryInitialMs = Math.max(
       0,
       deps.unreadPublicationRetryDelayMs ?? DEFAULT_UNREAD_PUBLICATION_RETRY_MS,
@@ -1248,6 +1385,7 @@ export class PiSessionService implements SessionRouteService {
       },
       deps.askUserEnabled === true ? { open: (input) => this.openAsk(input) } : undefined,
       deps.appendSystemPromptSections ?? [],
+      this.reviewDataDir,
     );
     this.createAgentRuntime = deps.createAgentRuntime ?? defaultCreateAgentRuntime;
     this.workspaceActivity = deps.workspaceActivity;
@@ -1820,6 +1958,22 @@ export class PiSessionService implements SessionRouteService {
     this.dialogWaiters.settleWithCancelValue(dialogId);
     this.publishStatus(session);
     return { result: "closed", outcome, sessionStatus: this.statusFromSession(session) };
+  }
+
+  /**
+   * Roll a message's file change back to its pre-tool bytes. Guarded: the
+   * current file must still match what the tool left behind (`conflict`
+   * otherwise, with the file untouched), and the record's own session must
+   * own the snapshot. `notFound` when no such snapshot exists for this
+   * session. Only files the review store captured (`write`/`edit`) can be
+   * rolled back.
+   */
+  async rollbackReview(ref: PiSessionRef, snapshotId: string): Promise<RollbackReviewChangeResult> {
+    await this.assertWritable(ref);
+    const session = await this.sessionForStatusOrDialogClose(ref);
+    if (this.reviewDataDir === undefined) return { kind: "unavailable", detail: "Review snapshots are not enabled on this daemon." };
+    const snapshotOwner = session.sessionId;
+    return rollbackReviewChange({ dataDir: this.reviewDataDir, sessionId: snapshotOwner, snapshotId });
   }
 
   /**
@@ -3010,6 +3164,9 @@ export class PiSessionService implements SessionRouteService {
     }
     const deletedIdSet = new Set(deletedSessionIds);
     await this.forgetUnreadSessions(readyRecords.filter((record) => deletedIdSet.has(record.sessionId)));
+    // Deleting an archived session also removes its review snapshots (ADR
+    // 0043: snapshot storage is session-owned and dies with the session).
+    await this.removeReviewStores(deletedSessionIds);
 
     return {
       deleted: true,
@@ -3729,6 +3886,22 @@ export class PiSessionService implements SessionRouteService {
       ));
     }
     await this.publishUnreadMutations(mutations);
+  }
+
+  /**
+   * Remove the review snapshot stores of deleted sessions. Best-effort: a
+   * failed unlink must not fail the deletion the user asked for; the orphaned
+   * directory is inert (nothing references it once the session is gone).
+   */
+  private async removeReviewStores(sessionIds: readonly string[]): Promise<void> {
+    if (this.reviewDataDir === undefined) return;
+    for (const sessionId of sessionIds) {
+      try {
+        await removeSessionReviewStore(this.reviewDataDir, sessionId);
+      } catch {
+        this.logger.info({ sessionId }, "review store cleanup failed");
+      }
+    }
   }
 
   private observeUnreadActivityState(session: PiAgentSession): void {

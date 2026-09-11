@@ -37,6 +37,7 @@ import type {
   SessionStreamSnapshot,
 } from "../types.js";
 import type { NormalizedSessionCleanupRequest } from "./sessionCleanup.js";
+import type { RollbackReviewChangeResult } from "./reviewStore.js";
 
 export type SessionRouteRef = ClientSessionRef;
 
@@ -69,6 +70,8 @@ export interface SessionRouteService {
   cancelAsk(ref: SessionRouteRef, askId: string): Promise<AskUserCloseResponse>;
   answerDialog(ref: SessionRouteRef, dialogId: string, value: ExtensionDialogAnswer): Promise<ExtensionDialogCloseResponse>;
   cancelDialog(ref: SessionRouteRef, dialogId: string): Promise<ExtensionDialogCloseResponse>;
+  /** Roll a captured write/edit back to its pre-tool bytes (guarded rollback). */
+  rollbackReview(ref: SessionRouteRef, snapshotId: string): Promise<RollbackReviewChangeResult>;
   dismissWarning(ref: SessionRouteRef, dismissId: string): Promise<ClientSessionStatus>;
   getSessionDefaults(ref: SessionRouteRef): Promise<SessionDefaults>;
   setSessionDefaults(ref: SessionRouteRef, defaults: SessionDefaultsUpdate): Promise<SessionDefaults>;

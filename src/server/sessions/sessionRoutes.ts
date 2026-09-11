@@ -367,6 +367,18 @@ export function registerSessionRoutes(app: FastifyInstance, sessions: SessionRou
     }
   });
 
+  // Roll a captured write/edit back to its pre-tool bytes (guarded; `conflict`
+  // when the file changed since the tool ran, `notFound` for unknown ids).
+  app.post<{ Params: { sessionId: string }; Body: { cwd?: unknown; snapshotId?: unknown } | undefined }>(`${prefix}/sessions/:sessionId/review/rollback`, async (request, reply) => {
+    try {
+      const body = requireRecord(request.body);
+      const snapshotId = requireString(body, "snapshotId");
+      return await sessions.rollbackReview(sessionRefFromBody(request.params.sessionId, body), snapshotId);
+    } catch (error) {
+      return reply.code(mutationErrorStatus(error)).send({ error: errorMessage(error) });
+    }
+  });
+
   app.post<{ Params: { sessionId: string }; Body: { cwd?: unknown; dismissId?: unknown } | undefined }>(`${prefix}/sessions/:sessionId/warnings/dismiss`, async (request, reply) => {
     try {
       const body = optionalRecord(request.body);

@@ -51,14 +51,14 @@ describe("ask_user registration", () => {
     const unrestricted = createPiWebCustomToolDefinitions("/workspace", true, undefined, undefined, askUser);
     const restricted = createPiWebCustomToolDefinitions("/workspace", false, undefined, undefined, askUser);
 
-    expect(unrestricted.map((definition) => definition.name)).toEqual(["edit", "ask_user"]);
-    expect(restricted.map((definition) => definition.name)).toEqual(["edit", "ask_user"]);
+    expect(unrestricted.map((definition) => definition.name)).toEqual(["edit", "write", "ask_user"]);
+    expect(restricted.map((definition) => definition.name)).toEqual(["edit", "write", "ask_user"]);
   });
 
   it("omits ask_user when the capability is disabled", () => {
     const definitions = createPiWebCustomToolDefinitions("/workspace", true);
 
-    expect(definitions.map((definition) => definition.name)).toEqual(["edit"]);
+    expect(definitions.map((definition) => definition.name)).toEqual(["edit", "write"]);
   });
 });
 

@@ -1301,6 +1301,12 @@ class CapturingRouteSessionService implements SessionRouteService {
     return Promise.resolve({ result: "stale", sessionStatus: idleStatus(lookup) });
   }
 
+  readonly rollbackReviewCalls: { lookup: SessionRouteRef; snapshotId: string }[] = [];
+  rollbackReview(lookup: SessionRouteRef, snapshotId: string): Promise<import("./reviewStore.js").RollbackReviewChangeResult> {
+    this.rollbackReviewCalls.push({ lookup, snapshotId });
+    return Promise.resolve({ kind: "rolledBack", record: { snapshotId, sessionId: lookup.id, path: "file.txt", operation: "write", status: "modified", state: "rolledBack", additions: 0, deletions: 0, reversible: false, truncated: false, capturedAt: "2026-09-11T00:00:00.000Z" } });
+  }
+
   cleanupPreview(request: NormalizedSessionCleanupRequest): Promise<SessionCleanupPreviewResponse> {
     this.cleanupPreviewCalls.push(request);
     return Promise.resolve({ generatedAt: "2026-06-25T00:00:00.000Z", thresholds: request.thresholds, projects: [], totals: { archiveCount: 0, deleteCount: 0 } });
