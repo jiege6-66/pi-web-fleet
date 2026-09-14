@@ -239,9 +239,9 @@ export class AppNavigationPanel extends LitElement {
   static override styles = css`
     :host { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     :host([compact]) { flex: 1 1 auto; }
-    header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--pi-border); }
+    header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--pi-border); flex-wrap: wrap; }
     header strong { flex: 0 0 auto; }
-    machine-switcher { flex: 1 1 auto; min-width: 0; }
+    machine-switcher { flex: 1 1 auto; min-width: 96px; }
     :host([compact]) header { display: none; }
     .header-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
     /* Expanded sections share the panel height equally, so collapsing one
@@ -252,7 +252,8 @@ export class AppNavigationPanel extends LitElement {
     project-list[collapsed],
     workspace-list[collapsed],
     session-list[collapsed] { flex: 0 0 auto; min-height: auto; overflow: hidden; }
-    button, select.lang-select { border: 1px solid var(--pi-border); border-radius: 8px; background: var(--pi-surface); color: var(--pi-text); padding: 7px 9px; cursor: pointer; font-size: inherit; font-family: inherit; }
+    button, select.lang-select { border: 1px solid var(--pi-border); border-radius: 8px; background: var(--pi-surface); color: var(--pi-text); padding: 7px 6px; cursor: pointer; font-size: inherit; font-family: inherit; }
+    .header-actions { white-space: nowrap; }
     select.lang-select:hover { background: var(--pi-surface-hover); }
   `;
 }
