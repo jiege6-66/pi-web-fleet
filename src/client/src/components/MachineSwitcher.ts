@@ -79,7 +79,7 @@ export class MachineSwitcher extends LitElement implements KeyboardNavigableSect
           ${this.renderMachineIcon(selected)}
           ${this.renderActivity(selected)}
           <span class="machine-switcher-text">
-            <span class="machine-switcher-kicker">Machine</span>
+            <span class="machine-switcher-kicker">${t("nav.machineKicker")}</span>
             <span class="machine-switcher-label">${label}</span>
           </span>
           <span class=${`machine-status ${status}`}>${machineStatusLabel(status)}</span>
@@ -118,13 +118,13 @@ export class MachineSwitcher extends LitElement implements KeyboardNavigableSect
               type="button"
               class="machine-option-actions-toggle"
               title=${t("nav.machineActions")}
-              aria-label=${`Actions for ${machine.name}`}
+              aria-label=${t("nav.machineActionsFor", { name: machine.name })}
               aria-expanded=${String(actionsOpen)}
               @click=${(event: MouseEvent) => { event.stopPropagation(); this.toggleActionsMenu(machine.id, event.currentTarget); }}
             >⋯</button>
             ${actionsOpen ? html`
               <div class="machine-option-actions-panel" style=${this.actionMenuStyle} @click=${(event: MouseEvent) => { event.stopPropagation(); }}>
-                <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
+                <button class="danger" title=${t("nav.removeMachineNamed", { name: machine.name })} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
               </div>
             ` : null}
           </div>
@@ -357,7 +357,7 @@ function machineStatus(machine: Machine, statuses: Record<string, MachineHealth>
 }
 
 function machineStatusLabel(status: MachineStatus): string {
-  return status === "online" ? "online" : status === "offline" ? "offline" : status === "error" ? "error" : "unknown";
+  return status === "online" ? t("machine.statusOnline") : status === "offline" ? t("machine.statusOffline") : status === "error" ? t("machine.statusError") : t("machine.statusUnknown");
 }
 
 function machineTitle(machine: Machine): string {

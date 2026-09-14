@@ -67,7 +67,7 @@ export class MachineList extends LitElement implements KeyboardNavigableSection 
 
   private renderMachine(machine: Machine) {
     const status = this.statuses[machine.id]?.status ?? machine.status ?? "unknown";
-    const statusLabel = status === "online" ? "online" : status === "offline" ? "offline" : status === "error" ? "error" : "unknown";
+    const statusLabel = status === "online" ? t("machine.statusOnline") : status === "offline" ? t("machine.statusOffline") : status === "error" ? t("machine.statusError") : t("machine.statusUnknown");
     const hasRemoveAction = canRemoveMachine(machine) && this.onRemove !== undefined;
     return html`
       <div
@@ -111,7 +111,7 @@ export class MachineList extends LitElement implements KeyboardNavigableSection 
         >⋯</button>
         ${open ? html`
           <div class="action-menu-panel machine-menu-panel" id=${menuId} style=${this.menuStyle} @click=${(event: MouseEvent) => { event.stopPropagation(); }}>
-            <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
+            <button class="danger" title=${t("nav.removeMachineNamed", { name: machine.name })} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
           </div>
         ` : null}
       </div>

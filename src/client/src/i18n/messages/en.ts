@@ -53,6 +53,9 @@ export const enLocale: LocalePlugin = {
     "nav.noSessionSelected": "No session selected",
     "nav.noMachineSelected": "No machine selected",
     "nav.actions": "Actions",
+    "nav.machineKicker": "Machine",
+    "nav.machineActionsFor": "Actions for {name}",
+    "nav.removeMachineNamed": "Remove {name}",
     "nav.showActions": "Show Actions",
 
     // session
@@ -213,6 +216,10 @@ export const enLocale: LocalePlugin = {
     "chat.cancelled": "Cancelled",
     "chat.unanswered": "Unanswered",
 
+    "machine.statusOnline": "online",
+    "machine.statusOffline": "offline",
+    "machine.statusError": "error",
+    "machine.statusUnknown": "unknown",
     // workspace panel empty states
     "workspace.loadingProjects": "Loading projects…",
     "workspace.loadingProjectsBody": "Looking for projects you have added to PI WEB.",

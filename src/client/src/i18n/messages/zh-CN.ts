@@ -53,6 +53,9 @@ export const zhCNLocale: LocalePlugin = {
     "nav.noSessionSelected": "未选择会话",
     "nav.noMachineSelected": "未选择机器",
     "nav.actions": "操作",
+    "nav.machineKicker": "机器",
+    "nav.machineActionsFor": "{name} 的操作",
+    "nav.removeMachineNamed": "移除 {name}",
     "nav.showActions": "显示操作",
 
     // session
@@ -213,6 +216,10 @@ export const zhCNLocale: LocalePlugin = {
     "chat.cancelled": "已取消",
     "chat.unanswered": "未回答",
 
+    "machine.statusOnline": "在线",
+    "machine.statusOffline": "离线",
+    "machine.statusError": "错误",
+    "machine.statusUnknown": "未知",
     // workspace panel empty states
     "workspace.loadingProjects": "正在加载项目…",
     "workspace.loadingProjectsBody": "正在查找已添加到 PI WEB 的项目。",
