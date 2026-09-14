@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, stat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -47,6 +47,7 @@ describe("prepare + finalize", () => {
     expect(finalized.kind).toBe("record");
     if (finalized.kind !== "record") return;
     expect(finalized.record.status).toBe("added");
+    expect(finalized.record.reversible).toBe(true);
     expect(finalized.record.path).toBe("new.txt");
     expect(finalized.record.additions).toBe(3);
     expect(finalized.record.hunks?.[0]?.lines.every((line) => line.kind === "add")).toBe(true);
@@ -95,6 +96,16 @@ describe("prepare + finalize", () => {
 });
 
 describe("rollback", () => {
+  it.each([0o600, 0o755])("preserves captured file mode %i", async (mode) => {
+    const target = join(workspace, "mode.txt");
+    await writeFile(target, "before");
+    await chmod(target, mode);
+    const pending = await prepareReviewChange({ ...opts(), operation: "write", filePath: target });
+    await writeFile(target, "after");
+    await finalizeReviewChange(dataDir, pending, await readFile(target));
+    expect((await rollbackReviewChange({ dataDir, sessionId: "session-1", snapshotId: pending.snapshotId })).kind).toBe("rolledBack");
+    expect((await stat(target)).mode & 0o777).toBe(mode);
+  });
   it("restores previous bytes for a modification", async () => {
     const target = join(workspace, "r.txt");
     await writeFile(target, "before\n");

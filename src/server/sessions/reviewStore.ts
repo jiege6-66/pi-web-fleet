@@ -19,7 +19,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 
 /** Status of the change a review record describes. */
@@ -89,6 +89,7 @@ export interface PendingReviewChange {
   dir: string;
   /** True when the file existed before the tool (added vs modified/deleted). */
   fileExisted: boolean;
+  beforeMode?: number;
   /** True when the previous content exceeded the retention bound. */
   beforeTruncated: boolean;
   capturedAt: string;
@@ -151,11 +152,13 @@ export async function prepareReviewChange(input: PrepareReviewChangeInput): Prom
 
   let beforeBytes: Buffer | undefined;
   let fileExisted = false;
+  let beforeMode: number | undefined;
   let beforeTruncated = false;
   try {
     const info = await stat(absolutePath);
     if (info.isFile()) {
       fileExisted = true;
+      beforeMode = info.mode & 0o777;
       if (info.size <= REVIEW_MAX_RETAINED_BYTES) {
         beforeBytes = await readFile(absolutePath);
       } else {
@@ -180,6 +183,7 @@ export async function prepareReviewChange(input: PrepareReviewChangeInput): Prom
     relativePath,
     dir,
     fileExisted,
+    ...(beforeMode === undefined ? {} : { beforeMode }),
     beforeTruncated,
     capturedAt: now().toISOString(),
   };
@@ -193,6 +197,7 @@ interface StoredReviewMeta {
   operation: "write" | "edit";
   capturedAt: string;
   hadBefore: boolean;
+  beforeMode?: number;
   beforeRetained: boolean;
   postHash: string | null;
   state: ReviewChangeState;
@@ -231,7 +236,7 @@ export async function finalizeReviewChange(
     additions,
     deletions,
     ...(hunks === undefined ? {} : { hunks }),
-    reversible: !pending.beforeTruncated && (pending.fileExisted || nextBytes === undefined),
+    reversible: !pending.beforeTruncated,
     truncated: pending.beforeTruncated || truncated,
     capturedAt: pending.capturedAt,
   };
@@ -244,6 +249,7 @@ export async function finalizeReviewChange(
     operation: pending.operation,
     capturedAt: pending.capturedAt,
     hadBefore: pending.fileExisted && !pending.beforeTruncated,
+    ...(pending.beforeMode === undefined ? {} : { beforeMode: pending.beforeMode }),
     beforeRetained: !pending.beforeTruncated,
     postHash: nextHash,
     state: "active",
@@ -283,6 +289,7 @@ function isStoredReviewMeta(value: unknown): value is StoredReviewMeta {
     (value["operation"] === "write" || value["operation"] === "edit") &&
     typeof value["capturedAt"] === "string" &&
     typeof value["hadBefore"] === "boolean" &&
+    (value["beforeMode"] === undefined || (typeof value["beforeMode"] === "number" && Number.isInteger(value["beforeMode"]) && value["beforeMode"] >= 0 && value["beforeMode"] <= 0o777)) &&
     typeof value["beforeRetained"] === "boolean" &&
     (value["postHash"] === null || typeof value["postHash"] === "string") &&
     (value["state"] === "active" || value["state"] === "rolledBack") &&
@@ -328,8 +335,16 @@ export async function rollbackReviewChange(input: { dataDir: string; sessionId: 
     }
     await mkdir(dirname(meta.absolutePath), { recursive: true });
     const temp = `${meta.absolutePath}.review-rollback-${randomUUID()}.tmp`;
-    await writeFile(temp, retained);
-    await rename(temp, meta.absolutePath);
+    // Old snapshots have no mode: preserve the current mode, or fail safe
+    // to owner-only access if the target was deleted. Never default to 0644.
+    const mode = meta.beforeMode ?? (await stat(meta.absolutePath).catch(() => undefined))?.mode;
+    try {
+      await writeFile(temp, retained, { flag: "wx", mode: 0o600 });
+      await chmod(temp, mode === undefined ? 0o600 : mode & 0o777);
+      await rename(temp, meta.absolutePath);
+    } finally {
+      await rm(temp, { force: true });
+    }
   }
 
   meta.state = "rolledBack";

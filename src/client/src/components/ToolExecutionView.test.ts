@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewChangeRecord, RollbackReviewChangeResult } from "../../../shared/apiTypes";
 import { clearRolledBackSnapshotsForTest, isSnapshotRolledBack } from "../reviewState";
 import type { ToolExecutionPart } from "./shared";
+import { setLocale } from "../i18n";
 import { ToolExecutionView } from "./ToolExecutionView";
 
 afterEach(() => {
+  setLocale("en");
   vi.restoreAllMocks();
   document.body.replaceChildren();
   localStorage.clear();
@@ -78,6 +80,17 @@ function renderRoot(view: ToolExecutionView): ShadowRoot {
 }
 
 describe("ToolExecutionView review card rendering", () => {
+  it("localizes added-file status and rollback confirmation", async () => {
+    setLocale("zh-CN");
+    const confirm = vi.fn(() => false);
+    window.confirm = confirm;
+    const view = await mountView(createExecution("write", createReviewRecord({ status: "added" })));
+    expect(renderRoot(view).querySelector(".review-status-badge")?.textContent).toBe("新增");
+    const button = renderRoot(view).querySelector<HTMLButtonElement>(".rollback-button");
+    expect(button?.disabled).toBe(false);
+    button?.click();
+    expect(confirm).toHaveBeenCalledWith("回滚对 rollback-me.txt 的更改？");
+  });
   it("does not render review card if tool is not write or edit", async () => {
     const review = createReviewRecord();
     const execution = createExecution("bash", review);
@@ -152,7 +165,7 @@ describe("ToolExecutionView review card rendering", () => {
     const root = renderRoot(view);
 
     const notice = root.querySelector(".review-notice");
-    expect(notice?.textContent).toBe("内容过大，未保存 diff / 不可回滚");
+    expect(notice?.textContent).toBe("Diff omitted because content is too large. Rollback availability is shown by the button.");
     expect(root.querySelector(".review-hunks-details")).toBeNull();
   });
 
@@ -256,7 +269,8 @@ describe("ToolExecutionView rollback interactions", () => {
     await view.updateComplete;
 
     const errorEl = root.querySelector(".review-error");
-    expect(errorEl?.textContent).toBe("Conflict: File modified concurrently");
+    expect(errorEl?.textContent).toBe("Rollback conflict");
+    expect(errorEl?.getAttribute("title")).toBe("File modified concurrently");
     const btn = root.querySelector<HTMLButtonElement>(".rollback-button");
     expect(btn?.disabled).toBe(false);
     expect(btn?.textContent).toBe("Rollback");
@@ -279,7 +293,8 @@ describe("ToolExecutionView rollback interactions", () => {
     await view.updateComplete;
 
     const errorEl = root.querySelector(".review-error");
-    expect(errorEl?.textContent).toBe("Unavailable: Backup not retained");
+    expect(errorEl?.textContent).toBe("Rollback unavailable");
+    expect(errorEl?.getAttribute("title")).toBe("Backup not retained");
   });
 
   it("displays error when rollback rejects", async () => {

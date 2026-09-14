@@ -14,6 +14,30 @@ export type ExtensionDialogAnswerCallback = (dialogId: string, value: ExtensionD
 export type ExtensionDialogCancelCallback = (dialogId: string) => void | Promise<void>;
 export type ExtensionDialogDismissCallback = (dialogId: string) => void;
 
+function permissionTool(dialog: PendingExtensionDialog): string | undefined {
+  const match = /^Approval required — (write|edit|bash)\n/.exec(dialog.title);
+  const tool = match?.[1];
+  return dialog.kind === "select" && tool !== undefined
+    && dialog.options?.join("\0") === ["Allow once", `Allow for this session (${tool})`, "Deny"].join("\0") ? tool : undefined;
+}
+
+function dialogTitle(dialog: PendingExtensionDialog): string {
+  const tool = permissionTool(dialog);
+  if (tool === undefined) return dialog.title;
+  const lines = dialog.title.split("\n");
+  return lines.map((line, index) => index === 0 ? t("permission.title", { tool })
+    : index === lines.length - 1 && line.startsWith("Workspace: ") ? t("permission.workspace", { path: line.slice(11) }) : line).join("\n");
+}
+
+function optionLabel(dialog: PendingExtensionDialog, option: string): string {
+  const tool = permissionTool(dialog);
+  if (tool === undefined) return option;
+  if (option === "Allow once") return t("permission.once");
+  if (option === "Deny") return t("permission.deny");
+  if (option === `Allow for this session (${tool})`) return t("permission.session", { tool });
+  return option;
+}
+
 const COUNTDOWN_TICK_MS = 1_000;
 
 /** Header status label for a closed extension dialog. */
@@ -36,7 +60,7 @@ export function extensionDialogCloseSummary(closed: ClosedExtensionDialog): stri
       // the card still renders rather than crashing the transcript.
       if (answer === undefined) return t("dialog.closedNoAnswer");
       if (typeof answer === "boolean") return answer ? t("dialog.answeredYes") : t("dialog.answeredNo");
-      return answer === "" ? t("dialog.answeredEmpty") : t("dialog.answeredWith", { answer });
+      return answer === "" ? t("dialog.answeredEmpty") : t("dialog.answeredWith", { answer: optionLabel(closed.dialog, answer) });
     }
     case "cancelled": return t("dialog.dismissedNoAnswer");
     case "timeout": return t("dialog.timeoutNoAnswer");
@@ -130,7 +154,7 @@ export class ExtensionDialogCard extends LitElement {
     return html`
       <article class="card open-card" aria-labelledby="extension-dialog-heading">
         <header class="card-header">
-          <h2 id="extension-dialog-heading">${dialog.title}</h2>
+          <h2 id="extension-dialog-heading">${dialogTitle(dialog)}</h2>
           ${countdown === undefined
             ? null
             // Decorative only — no live region: a polite region would queue one
@@ -164,7 +188,7 @@ export class ExtensionDialogCard extends LitElement {
     return html`
       <div class="dialog-options" role="group" aria-label=${t("dialog.choices")}>
         ${(dialog.options ?? []).map((option) => html`
-          <button class="option-button" type="button" ?disabled=${this.closing} @click=${() => { this.answerDialog(dialog, option); }}>${option}</button>
+          <button class="option-button" type="button" ?disabled=${this.closing} @click=${() => { this.answerDialog(dialog, option); }}>${optionLabel(dialog, option)}</button>
         `)}
       </div>
       <footer class="dialog-footer">
@@ -199,7 +223,7 @@ export class ExtensionDialogCard extends LitElement {
     return html`
       <article class="card closed-card" aria-labelledby="extension-dialog-closed-heading">
         <header class="card-header">
-          <h2 id="extension-dialog-closed-heading">${closed.dialog.title}</h2>
+          <h2 id="extension-dialog-closed-heading">${dialogTitle(closed.dialog)}</h2>
           <span class=${`header-status ${closed.reason}`}>${extensionDialogCloseLabel(closed.reason)}</span>
         </header>
         <p class="closed-summary">${extensionDialogCloseSummary(closed)}</p>

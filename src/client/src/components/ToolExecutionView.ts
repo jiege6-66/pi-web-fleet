@@ -25,6 +25,7 @@ export class ToolExecutionView extends LitElement {
   @state() private localRolledBack = false;
   @state() private isRollingBack = false;
   @state() private rollbackError: string | undefined;
+  @state() private rollbackDetail: string | undefined;
   private readonly i18n = new I18nController(this);
 
   override render() {
@@ -151,7 +152,7 @@ export class ToolExecutionView extends LitElement {
           <div class="review-title">
             <span class="review-badge">${t("chat.review")}</span>
             <span class="review-path" title=${review.path} aria-label=${`File: ${review.path}`}>${review.path}</span>
-            <span class=${`review-status-badge ${review.status}`}>${review.status}</span>
+            <span class=${`review-status-badge ${review.status}`}>${t(`review.${review.status}`)}</span>
           </div>
           <div class="review-actions">
             <span class="diff-stats">
@@ -163,14 +164,14 @@ export class ToolExecutionView extends LitElement {
           </div>
         </div>
 
-        ${review.truncated ? html`<p class="review-notice">内容过大，未保存 diff / 不可回滚</p>` : null}
-        ${this.rollbackError !== undefined ? html`<p class="review-error" role="alert">${this.rollbackError}</p>` : null}
+        ${review.truncated ? html`<p class="review-notice">${t("review.truncated")}</p>` : null}
+        ${this.rollbackError !== undefined ? html`<p class="review-error" role="alert" title=${this.rollbackDetail ?? ""}>${this.rollbackError}</p>` : null}
 
         ${review.hunks !== undefined && review.hunks.length > 0 ? html`
           <details class="review-hunks-details">
             <summary>
               <span>${t("chat.changes")}</span>
-              <small>${String(totalDiffLines)} ${totalDiffLines === 1 ? "line" : "lines"}${hunkCount > 1 ? ` (${String(hunkCount)} hunks)` : ""}</small>
+              <small>${t("review.lines", { count: totalDiffLines })}${hunkCount > 1 ? t("review.hunks", { count: hunkCount }) : ""}</small>
             </summary>
             <div class="review-hunk-lines">
               ${review.hunks.map((hunk) => this.renderHunk(hunk))}
@@ -216,29 +217,31 @@ export class ToolExecutionView extends LitElement {
   private async handleRollback(review: ReviewChangeRecord): Promise<void> {
     if (this.isRollingBack) return;
     if (typeof window !== "undefined" && typeof window.confirm === "function") {
-      const confirmed = window.confirm(`Roll back changes to ${review.path}?`);
+      const confirmed = window.confirm(t("review.confirm", { path: review.path }));
       if (!confirmed) return;
     }
     const callback = this.onRollbackReview;
     if (callback === undefined) return;
     this.isRollingBack = true;
     this.rollbackError = undefined;
+    this.rollbackDetail = undefined;
     try {
       const result = await callback(review.snapshotId);
       if (result !== undefined) {
+        this.rollbackDetail = "detail" in result ? result.detail : undefined;
         switch (result.kind) {
           case "rolledBack":
             this.localRolledBack = true;
             recordRolledBackSnapshot(review.snapshotId);
             break;
           case "conflict":
-            this.rollbackError = result.detail !== "" ? `Conflict: ${result.detail}` : "Rollback conflict";
+            this.rollbackError = t("review.conflict");
             break;
           case "unavailable":
-            this.rollbackError = result.detail !== "" ? `Unavailable: ${result.detail}` : "Rollback unavailable";
+            this.rollbackError = t("review.unavailable");
             break;
           case "notFound":
-            this.rollbackError = "Snapshot not found";
+            this.rollbackError = t("review.notFound");
             break;
         }
       }

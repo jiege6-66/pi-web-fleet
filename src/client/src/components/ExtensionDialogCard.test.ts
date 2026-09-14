@@ -68,6 +68,15 @@ describe("extension-dialog-card confirm dialog", () => {
 });
 
 describe("extension-dialog-card select dialog", () => {
+  it("localizes permission choices without changing the wire answer", async () => {
+    setLocale("zh-CN");
+    const onAnswer = vi.fn<ExtensionDialogAnswerCallback>();
+    const card = await mountOpenDialog(openDialog({ kind: "select", title: 'Approval required — write\n{}\nWorkspace: /workspace', options: ["Allow once", "Allow for this session (write)", "Deny"] }), { onAnswer });
+    expect(renderRoot(card).querySelector("h2")?.textContent).toContain("需要审批");
+    buttonWithText(renderRoot(card), "仅允许本次").click();
+    await flushClose(card);
+    expect(onAnswer).toHaveBeenCalledWith("dlg-1", "Allow once");
+  });
   it("answers with the clicked option", async () => {
     const onAnswer = vi.fn<ExtensionDialogAnswerCallback>();
     const card = await mountOpenDialog(openDialog({
