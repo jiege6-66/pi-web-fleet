@@ -1,5 +1,6 @@
 import { html, svg } from "lit";
 import { requirePluginBackendRevision } from "../../../shared/pluginBackendProtocol";
+import { pluginI18n, resolvePluginKey } from "./pluginI18n";
 import type { PiWebPluginRegistration, PluginAction, PluginActivationResult, PluginRuntimeContext, QualifiedContributionId, QualifiedPluginAction, QualifiedThemeContribution, QualifiedThemePairContribution, QualifiedWorkspaceLabelContribution, QualifiedWorkspacePanelContribution, ThemeContribution, ThemePairContribution, WorkspaceInvalidation, WorkspaceLabelContext, WorkspaceLabelContribution, WorkspaceLabelItem, WorkspacePanelContext, WorkspacePanelContribution, WorkspacePluginBinding, WorkspaceResource } from "./types";
 
 const idPattern = /^[a-z][a-z0-9.-]*$/u;
@@ -76,6 +77,7 @@ export class PluginRegistry {
         runtimePluginId,
         html,
         svg,
+        i18n: pluginI18n,
       }));
       validateActivation?.(activation);
       const contributions = activation.contributions;
@@ -127,15 +129,17 @@ export class PluginRegistry {
         pluginId: action.pluginId,
         localId: action.localId,
         ...(action.machineId === undefined ? {} : { machineId: action.machineId }),
-        title: action.title,
+        // Display text resolves here, on every read, so a language switch is
+        // reflected the next time the host renders the palette.
+        title: resolvePluginKey(action.titleKey, action.title),
         run: () => this.isContributionActive(action.pluginId, action.machineId, runtimeContextMachineId(context), action.sourcePluginId)
           ? action.run(pluginRuntimeContextFor(context, action.pluginId))
           : undefined,
       };
-      if (action.description !== undefined) qualified.description = action.description;
+      if (action.description !== undefined) qualified.description = resolvePluginKey(action.descriptionKey, action.description);
       if (action.shortcut !== undefined) qualified.shortcut = action.shortcut;
       if (action.shortcutAliases !== undefined) qualified.shortcutAliases = [...action.shortcutAliases];
-      if (action.group !== undefined) qualified.group = action.group;
+      if (action.group !== undefined) qualified.group = resolvePluginKey(action.groupKey, action.group);
       if (enabled !== undefined) qualified.enabled = enabled;
       if (disabledReason !== undefined && disabledReason !== "") qualified.disabledReason = disabledReason;
       return qualified;

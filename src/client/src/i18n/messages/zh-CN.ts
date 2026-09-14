@@ -186,6 +186,8 @@ export const zhCNLocale: LocalePlugin = {
     "chat.clearQueue": "清空队列",
     "chat.messageActions": "消息操作",
     "chat.steerAction": "引导",
+    "chat.tabChat": "聊天",
+    "session.unreadBadge": "{count} 条未读",
     "chat.selectModel": "选择模型",
     "chat.thinkingLevel": "思考等级: {level}",
     "chat.messagePlaceholder": "给 pi 发送消息… 输入 / 使用命令，输入 @ 查找文件，# 选择模型",

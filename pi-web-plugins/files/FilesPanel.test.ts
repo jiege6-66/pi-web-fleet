@@ -283,6 +283,7 @@ async function mountPanel(context: WorkspacePanelContext, runtime = new FilesRun
 interface ContextOptions {
   files?: WorkspacePanelContext["files"];
   navigation?: WorkspacePanelNavigationV1 | null;
+  i18n?: WorkspacePanelContext["i18n"];
 }
 
 function createContext(options: ContextOptions = {}): WorkspacePanelContext {
@@ -293,6 +294,7 @@ function createContext(options: ContextOptions = {}): WorkspacePanelContext {
     host: { requestRender: vi.fn() },
     prompt: { insertText: vi.fn(), getText: vi.fn(() => ""), getSelection: vi.fn(() => null) },
     terminal: { open: vi.fn(), runCommand: vi.fn() },
+    ...(options.i18n === undefined ? {} : { i18n: options.i18n }),
     ...(options.navigation === null ? {} : { navigation: options.navigation ?? createNavigation() }),
   };
 }
@@ -371,3 +373,31 @@ function requiredElement<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) throw new Error(`Expected ${label}`);
   return value;
 }
+
+describe("Files panel host i18n", () => {
+  it("renders Chinese copy when the host hands over a zh-CN handle", async () => {
+    // Minimal handle mirroring the host's resolve-with-fallback contract.
+    const zhMessages: Record<string, string> = {
+      "plugins.files.panelTitle": "文件",
+      "plugins.files.upload": "上传",
+      "plugins.files.refreshButton": "刷新",
+      "plugins.files.noFiles": "未加载文件。",
+    };
+    const i18n = Object.assign(
+      (key: string, params?: Readonly<Record<string, string | number>>) => {
+        const message = zhMessages[key] ?? key;
+        if (params === undefined) return message;
+        return message.replace(/\{(\w+)\}/g, (token, name: string) => params[name] === undefined ? token : String(params[name]));
+      },
+      { locale: "zh-CN" },
+    );
+
+    const context = createContext({ i18n });
+    const panel = await mountPanel(context);
+
+    const text = panel.shadowRoot?.textContent ?? "";
+    expect(text).toContain("文件");
+    expect(text).toContain("上传");
+    expect(text).toContain("刷新");
+  });
+});

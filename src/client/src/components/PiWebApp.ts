@@ -37,6 +37,7 @@ import { themePackPlugin } from "../plugins/themes";
 import { loadExternalPlugins, type ExternalPluginLoadResult } from "../plugins/external";
 import { REQUIRED_TERMINAL_PLUGIN_ID, type TerminalPluginMode } from "../../../shared/requiredTerminalPlugin";
 import { PluginRegistry, installPluginRuntimeScope, installWorkspaceLabelScope, installWorkspacePanelScope } from "../plugins/registry";
+import { pluginI18n, resolvePluginKey } from "../plugins/pluginI18n";
 import { createPairedPluginWorkspaceBackend, createPluginWorkspaceBackend } from "../plugins/workspaceBackend";
 import { I18nController, t } from "../i18n";
 import { requiredTerminalUnavailableError, snapshotRequiredTerminalBrowserFacade, type RequiredTerminalBrowserComposition, type WorkspaceContributionNavigationV1 } from "../plugins/requiredTerminalFacade";
@@ -1981,6 +1982,7 @@ export class PiWebApp extends LitElement {
         workspace,
         state: this.state,
         files: this.createWorkspaceFiles(workspace, machine),
+        i18n: pluginI18n,
         ...(backend === undefined ? {} : { backend }),
         ...(pairedBackend === undefined ? {} : { pairedBackend }),
         host: this.createWorkspaceHost(),
@@ -2023,6 +2025,7 @@ export class PiWebApp extends LitElement {
         workspace,
         state: this.state,
         files: this.createWorkspaceFiles(workspace, machine),
+        i18n: pluginI18n,
         ...(backend === undefined ? {} : { backend }),
         ...(pairedBackend === undefined ? {} : { pairedBackend }),
         prompt: this.createPromptEditor(),
@@ -2450,6 +2453,7 @@ export class PiWebApp extends LitElement {
     const createContext = (): PluginRuntimeContext => installPluginRuntimeScope({
       state: this.state,
       prompt: this.createPromptEditor(),
+      i18n: pluginI18n,
       piWebUnstable: {
         openSettings: (section) => { this.openSettings(section); },
       },
@@ -3149,17 +3153,17 @@ export class PiWebApp extends LitElement {
     return [
       {
         id: "navigation",
-        label: "Sessions",
+        label: t("nav.sessions"),
         icon: "navigation",
         className: "navigation-tab",
-        ...(unreadCount === 0 ? {} : { badge: unreadCount, badgeLabel: `${String(unreadCount)} unread`, badgeTone: "unread" }),
+        ...(unreadCount === 0 ? {} : { badge: unreadCount, badgeLabel: t("session.unreadBadge", { count: unreadCount }), badgeTone: "unread" }),
       },
-      { id: "chat", label: "Chat", icon: "chat" },
+      { id: "chat", label: t("chat.tabChat"), icon: "chat" },
       ...panels.map((panel): AppMobileMainTab => {
         const icon = panel.icon;
         return {
           id: panel.id,
-          label: panel.title,
+          label: resolvePluginKey(panel.titleKey, panel.title),
           ...(icon === undefined ? {} : { icon }),
           badge: this.mobilePanelBadge(panel),
         };

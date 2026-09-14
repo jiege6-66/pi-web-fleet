@@ -1,4 +1,4 @@
-import type { FileTreeEntry, WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
+import type { FileTreeEntry, PluginI18n, WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
 import { css, html, LitElement, type PropertyValues, type TemplateResult } from "lit";
 import { property, query, state } from "lit/decorators.js";
 import {
@@ -15,6 +15,27 @@ import { createWorkspaceFileViewModeStore, type WorkspaceFileViewModeStore } fro
 
 interface PendingWorkspaceUploadReview {
   files: File[];
+}
+
+/**
+ * Translate one key with the host handle, falling back to the English literal
+ * the panel ships. Older hosts provide no handle; the literal is then the
+ * whole answer, which keeps the panel rendering identically there. The
+ * fallback interpolates too, so a hostless render reads exactly like an
+ * untranslated one.
+ */
+function tr(i18n: PluginI18n | undefined, key: string, fallback: string, params?: Readonly<Record<string, string | number>>): string {
+  if (i18n === undefined) return interpolate(fallback, params);
+  const translated = i18n(key, params);
+  return translated === "" || translated === key ? interpolate(fallback, params) : translated;
+}
+
+function interpolate(text: string, params?: Readonly<Record<string, string | number>>): string {
+  if (params === undefined) return text;
+  return text.replace(/\{([\w.-]+)\}/g, (token, name: string) => {
+    const value = params[name];
+    return value === undefined ? token : String(value);
+  });
 }
 
 export class WorkspaceFilesPanel extends LitElement {
@@ -87,7 +108,7 @@ export class WorkspaceFilesPanel extends LitElement {
     if (scope.capabilityError !== undefined) {
       return html`
         <section class="capability-error" role="alert">
-          <strong>Files is unavailable on this host.</strong>
+          <strong>${tr(context.i18n, "plugins.files.unavailable", "Files is unavailable on this host.")}</strong>
           <span>${scope.capabilityError}</span>
         </section>
       `;
@@ -107,12 +128,12 @@ export class WorkspaceFilesPanel extends LitElement {
         @drop=${this.handleDrop}
       >
         <section class="toolbar">
-          <strong>Files</strong>
-          ${scope.treeLoading ? html`<span class="muted">loading…</span>` : null}
-          ${scope.treeStale ? html`<span class="stale">stale</span>` : null}
+          <strong>${tr(context.i18n, "plugins.files.panelTitle", "Files")}</strong>
+          ${scope.treeLoading ? html`<span class="muted">${tr(context.i18n, "plugins.files.loading", "loading…")}</span>` : null}
+          ${scope.treeStale ? html`<span class="stale">${tr(context.i18n, "plugins.files.stale", "stale")}</span>` : null}
           <div class="toolbar-actions">
-            <button @click=${this.openFilePicker}>Upload</button>
-            <button @click=${() => { void runtime.refreshFiles(context); }}>Refresh</button>
+            <button @click=${this.openFilePicker}>${tr(context.i18n, "plugins.files.upload", "Upload")}</button>
+            <button @click=${() => { void runtime.refreshFiles(context); }}>${tr(context.i18n, "plugins.files.refreshButton", "Refresh")}</button>
           </div>
           <input id="workspace-upload-input" class="visually-hidden" type="file" multiple @change=${this.handleFileInputChange} />
         </section>
@@ -120,7 +141,7 @@ export class WorkspaceFilesPanel extends LitElement {
         ${this.renderUploadProgress(context, runtime, scope)}
         <section class="split">
           <div class="list tree">
-            ${scope.fileTree.length === 0 ? html`<p class="muted">No files loaded.</p>` : scope.fileTree.map((entry) => this.renderTreeEntry(context, runtime, scope, entry, 0))}
+            ${scope.fileTree.length === 0 ? html`<p class="muted">${tr(context.i18n, "plugins.files.noFiles", "No files loaded.")}</p>` : scope.fileTree.map((entry) => this.renderTreeEntry(context, runtime, scope, entry, 0))}
           </div>
           <div class="viewer">
             <pi-web-files-viewer
@@ -138,8 +159,8 @@ export class WorkspaceFilesPanel extends LitElement {
         </section>
         <div class="drop-overlay" aria-hidden=${this.dragActive ? "false" : "true"}>
           <div>
-            <strong>Drop files to upload</strong>
-            <span>Uploads immediately to the default folder.</span>
+            <strong>${tr(context.i18n, "plugins.files.dropToUpload", "Drop files to upload")}</strong>
+            <span>${tr(context.i18n, "plugins.files.dropHint", "Uploads immediately to the default folder.")}</span>
           </div>
         </div>
         ${this.pendingUpload === undefined ? null : this.renderUploadDialog(context, runtime, this.pendingUpload, files.defaultUploadFolder)}
@@ -200,24 +221,24 @@ export class WorkspaceFilesPanel extends LitElement {
     return html`
       <section class="upload-progress" aria-label="Workspace uploads">
         <div class="upload-progress-header">
-          <strong>Uploads</strong>
-          <small>${uploadSummaryLabel(batches)}</small>
+          <strong>${tr(context.i18n, "plugins.files.uploads", "Uploads")}</strong>
+          <small>${uploadSummaryLabel(batches, context.i18n)}</small>
         </div>
         ${batches.map((batch) => html`
           <article class=${`upload-batch ${batch.status}`}>
             <div class="upload-batch-heading">
               <div>
-                <strong>${uploadBatchTitle(batch)}</strong>
-                <small>${batch.destinationFolder === "" ? "workspace root" : batch.destinationFolder}</small>
+                <strong>${uploadBatchTitle(batch, context.i18n)}</strong>
+                <small>${batch.destinationFolder === "" ? tr(context.i18n, "plugins.files.workspaceRoot", "workspace root") : batch.destinationFolder}</small>
               </div>
-              <span>${uploadBatchStatusLabel(batch)}</span>
+              <span>${uploadBatchStatusLabel(batch, context.i18n)}</span>
             </div>
             <progress max="1" .value=${uploadBatchProgressValue(batch)}></progress>
             <div class="upload-file-list">${batch.files.map((file) => this.renderUploadFile(file))}</div>
             <div class="upload-actions">
               ${batch.status === "uploading"
-                ? html`<button @click=${() => { runtime.cancelWorkspaceUpload(context, batch.id); }}>Cancel</button>`
-                : html`<button @click=${() => { runtime.clearWorkspaceUpload(context, batch.id); }}>Dismiss</button>`}
+                ? html`<button @click=${() => { runtime.cancelWorkspaceUpload(context, batch.id); }}>${tr(context.i18n, "plugins.files.cancel", "Cancel")}</button>`
+                : html`<button @click=${() => { runtime.clearWorkspaceUpload(context, batch.id); }}>${tr(context.i18n, "plugins.files.dismiss", "Dismiss")}</button>`}
             </div>
           </article>
         `)}
@@ -232,7 +253,7 @@ export class WorkspaceFilesPanel extends LitElement {
           <span>${file.name}</span>
           <small>${uploadFileDetail(file)}</small>
         </div>
-        <span class="upload-file-status">${uploadFileStatusLabel(file)}</span>
+        <span class="upload-file-status">${uploadFileStatusLabel(file, this.context?.i18n)}</span>
       </div>
     `;
   }
@@ -248,29 +269,29 @@ export class WorkspaceFilesPanel extends LitElement {
       <dialog class="upload-dialog" aria-label="Review file upload" @cancel=${this.handleDialogCancel} @close=${this.handleDialogClose} @click=${this.handleDialogClick}>
         <header>
           <div>
-            <span class="eyebrow">Upload</span>
-            <h2>Review ${fileCount === 1 ? "file" : `${String(fileCount)} files`}</h2>
+            <span class="eyebrow">${tr(context.i18n, "plugins.files.upload", "Upload")}</span>
+            <h2>${fileCount === 1 ? tr(context.i18n, "plugins.files.reviewFileSingular", "Review file") : tr(context.i18n, "plugins.files.reviewFilePlural", "Review {count} files", { count: fileCount })}</h2>
           </div>
-          <button class="close-button" type="button" title="Cancel upload" aria-label="Cancel upload" @click=${() => { this.closeUploadDialog(); }}>×</button>
+          <button class="close-button" type="button" title=${tr(context.i18n, "plugins.files.cancelUpload", "Cancel upload")} aria-label=${tr(context.i18n, "plugins.files.cancelUpload", "Cancel upload")} @click=${() => { this.closeUploadDialog(); }}>×</button>
         </header>
         <form @submit=${(event: SubmitEvent) => { this.submitUploadReview(event, context, runtime, review); }}>
           <label>
-            <span>Destination folder</span>
+            <span>${tr(context.i18n, "plugins.files.destinationFolder", "Destination folder")}</span>
             <input id="workspace-upload-destination" autofocus .value=${this.destinationFolder} placeholder=${defaultFolder} @input=${this.handleDestinationInput} />
-            <small>Workspace-relative. Leave empty to upload at the workspace root.</small>
+            <small>${tr(context.i18n, "plugins.files.destinationHint", "Workspace-relative. Leave empty to upload at the workspace root.")}</small>
           </label>
           <div class="dialog-options">
-            <label><input type="checkbox" .checked=${this.createDirs} @change=${this.handleCreateDirsChange} /><span>Create parent folders</span></label>
-            <label><input type="checkbox" .checked=${this.overwrite} @change=${this.handleOverwriteChange} /><span>Overwrite existing files</span></label>
+            <label><input type="checkbox" .checked=${this.createDirs} @change=${this.handleCreateDirsChange} /><span>${tr(context.i18n, "plugins.files.createParentFolders", "Create parent folders")}</span></label>
+            <label><input type="checkbox" .checked=${this.overwrite} @change=${this.handleOverwriteChange} /><span>${tr(context.i18n, "plugins.files.overwriteExisting", "Overwrite existing files")}</span></label>
           </div>
           <section class="review-files" aria-label="Files to upload">
-            <strong>${fileCount === 1 ? "File" : "Files"}</strong>
+            <strong>${fileCount === 1 ? tr(context.i18n, "plugins.files.fileSingular", "File") : tr(context.i18n, "plugins.files.filePlural", "Files")}</strong>
             ${review.files.map((file) => html`<div class="review-file"><span>${file.name}</span><small>${formatFileSize(file.size)}</small></div>`)}
           </section>
           ${this.formError === "" ? null : html`<div class="dialog-error" role="alert">${this.formError}</div>`}
           <footer>
-            <button type="button" @click=${() => { this.closeUploadDialog(); }}>Cancel</button>
-            <button type="submit">Upload</button>
+            <button type="button" @click=${() => { this.closeUploadDialog(); }}>${tr(context.i18n, "plugins.files.cancel", "Cancel")}</button>
+            <button type="submit">${tr(context.i18n, "plugins.files.upload", "Upload")}</button>
           </footer>
         </form>
       </dialog>
@@ -370,7 +391,7 @@ export class WorkspaceFilesPanel extends LitElement {
 
   private submitUploadReview(event: SubmitEvent, context: WorkspacePanelContext, runtime: FilesRuntime, review: PendingWorkspaceUploadReview): void {
     event.preventDefault();
-    const validationError = workspaceUploadReviewError(review.files, this.destinationFolder);
+    const validationError = workspaceUploadReviewError(review.files, this.destinationFolder, context.i18n);
     if (validationError !== undefined) {
       this.formError = validationError;
       return;
@@ -501,8 +522,8 @@ export function workspaceUploadBatches(batches: Record<string, WorkspaceUploadBa
   return Object.values(batches).sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 
-export function workspaceUploadReviewError(files: readonly File[], destinationFolder: string): string | undefined {
-  if (files.length === 0) return "Choose at least one file to upload.";
+export function workspaceUploadReviewError(files: readonly File[], destinationFolder: string, i18n?: PluginI18n): string | undefined {
+  if (files.length === 0) return tr(i18n, "plugins.files.chooseAtLeastOne", "Choose at least one file to upload.");
   for (const file of files) {
     try {
       workspaceUploadPath(destinationFolder, file.name);
@@ -533,11 +554,11 @@ export function startDirectWorkspaceUpload(
   });
 }
 
-export function uploadBatchStatusLabel(batch: WorkspaceUploadBatchState): string {
+export function uploadBatchStatusLabel(batch: WorkspaceUploadBatchState, i18n?: PluginI18n): string {
   switch (batch.status) {
-    case "completed": return "Done";
-    case "error": return "Failed";
-    case "cancelled": return "Cancelled";
+    case "completed": return tr(i18n, "plugins.files.statusDone", "Done");
+    case "error": return tr(i18n, "plugins.files.statusFailed", "Failed");
+    case "cancelled": return tr(i18n, "plugins.files.statusCancelled", "Cancelled");
     case "uploading": return formatPercent(batch.percent);
   }
 }
@@ -546,29 +567,33 @@ export function uploadBatchProgressValue(batch: WorkspaceUploadBatchState): numb
   return batch.status === "uploading" ? batch.percent : 1;
 }
 
-function uploadSummaryLabel(batches: readonly WorkspaceUploadBatchState[]): string {
+function uploadSummaryLabel(batches: readonly WorkspaceUploadBatchState[], i18n?: PluginI18n): string {
   const uploading = batches.filter((batch) => batch.status === "uploading").length;
-  return uploading === 0 ? `${String(batches.length)} recent` : `${String(uploading)} uploading`;
+  return uploading === 0
+    ? tr(i18n, "plugins.files.recentCount", "{count} recent", { count: batches.length })
+    : tr(i18n, "plugins.files.uploadingCount", "{count} uploading", { count: uploading });
 }
 
-function uploadBatchTitle(batch: WorkspaceUploadBatchState): string {
+function uploadBatchTitle(batch: WorkspaceUploadBatchState, i18n?: PluginI18n): string {
   const count = batch.files.length;
-  const files = count === 1 ? "file" : "files";
+  const word = count === 1
+    ? tr(i18n, "plugins.files.wordFile", "file")
+    : tr(i18n, "plugins.files.wordFiles", "files");
   switch (batch.status) {
-    case "completed": return `Uploaded ${String(count)} ${files}`;
-    case "error": return `Upload failed for ${String(count)} ${files}`;
-    case "cancelled": return `Upload cancelled for ${String(count)} ${files}`;
-    case "uploading": return `Uploading ${String(count)} ${files}`;
+    case "completed": return tr(i18n, "plugins.files.uploadedCount", "Uploaded {count} {word}", { count, word });
+    case "error": return tr(i18n, "plugins.files.uploadFailedCount", "Upload failed for {count} {word}", { count, word });
+    case "cancelled": return tr(i18n, "plugins.files.uploadCancelledCount", "Upload cancelled for {count} {word}", { count, word });
+    case "uploading": return tr(i18n, "plugins.files.uploadingCountTitle", "Uploading {count} {word}", { count, word });
   }
 }
 
-function uploadFileStatusLabel(file: WorkspaceUploadFileState): string {
+function uploadFileStatusLabel(file: WorkspaceUploadFileState, i18n?: PluginI18n): string {
   switch (file.status) {
-    case "pending": return "Pending";
+    case "pending": return tr(i18n, "plugins.files.statusPending", "Pending");
     case "uploading": return formatPercent(file.percent);
-    case "completed": return "Done";
-    case "error": return "Error";
-    case "cancelled": return "Cancelled";
+    case "completed": return tr(i18n, "plugins.files.statusDone", "Done");
+    case "error": return tr(i18n, "plugins.files.statusError", "Error");
+    case "cancelled": return tr(i18n, "plugins.files.statusCancelled", "Cancelled");
   }
 }
 

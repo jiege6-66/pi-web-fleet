@@ -173,7 +173,9 @@ const plugin: PiWebPlugin = {
         {
           id: "check",
           title: "Check for PI WEB Updates",
+          titleKey: "plugins.updates.check",
           description: "Bypass cached release data and check the selected machine now",
+          descriptionKey: "plugins.updates.checkDescription",
           group: "Updates",
           enabled: (context) => context.checkForPiWebUpdates !== undefined,
           disabledReason: () => "Update checks require a newer PI WEB gateway",
@@ -184,6 +186,7 @@ const plugin: PiWebPlugin = {
         {
           id: "workspace.updates",
           title: "Updates",
+          titleKey: "plugins.updates.panelTitle",
           icon: svg`
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 6v5h-5"></path>

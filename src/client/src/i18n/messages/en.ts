@@ -186,6 +186,8 @@ export const enLocale: LocalePlugin = {
     "chat.clearQueue": "Clear queue",
     "chat.messageActions": "Message actions",
     "chat.steerAction": "Steer",
+    "chat.tabChat": "Chat",
+    "session.unreadBadge": "{count} unread",
     "chat.selectModel": "Select model",
     "chat.thinkingLevel": "Thinking level: {level}",
     "chat.messagePlaceholder": "Message pi... Use / for commands, @ for tracked files, @ space for all files, # for models",

@@ -14,8 +14,10 @@ const plugin: PiWebPlugin = {
           {
             id: "workspace.open-tasks",
             title: "Open Workspace Tasks",
+            titleKey: "plugins.tasks.open",
             description: `Open the workspace Tasks tab. Configure tasks in ${TASKS_CONFIG_PATH}.`,
             group: "Workspace",
+            groupKey: "plugins.common.groupWorkspace",
             enabled: (context) => context.state.selectedWorkspace !== undefined,
             run: (context) => {
               if (context.state.selectedWorkspace === undefined) return;
@@ -27,6 +29,7 @@ const plugin: PiWebPlugin = {
           {
             id: "workspace.tasks",
             title: "Tasks",
+            titleKey: "plugins.tasks.panelTitle",
             icon: svg`
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 6h11"></path>

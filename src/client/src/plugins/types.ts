@@ -9,6 +9,16 @@ export type { LocalContributionId, PluginId, QualifiedContributionId } from "./i
 export type HtmlTemplateTag = (strings: TemplateStringsArray, ...values: unknown[]) => TemplateResult;
 export type SvgTemplateTag = (strings: TemplateStringsArray, ...values: unknown[]) => TemplateResult;
 
+/**
+ * Host translation handed to plugins. Mirrors the public plugin API: callable,
+ * with the active locale on `.locale`. Resolve during render so a locale
+ * switch re-translates on the next update.
+ */
+export interface PluginI18n {
+  (key: string, params?: Readonly<Record<string, string | number>>): string;
+  readonly locale: string;
+}
+
 export interface PiWebPluginRegistration {
   id: PluginId;
   plugin: PiWebPlugin;
@@ -42,6 +52,8 @@ export interface PluginActivationContext {
   readonly runtimePluginId: PluginId;
   readonly html: HtmlTemplateTag;
   readonly svg: SvgTemplateTag;
+  /** Host translation for plugin copy. Optional for older hosts. */
+  readonly i18n?: PluginI18n;
 }
 
 export interface PluginActivationResult {
@@ -180,6 +192,8 @@ export interface WorkspaceContext {
   workspace: Workspace;
   state: AppState;
   files: WorkspaceFilesContextValue;
+  /** Host translation for plugin copy. Optional for older hosts. */
+  i18n?: PluginI18n;
   backend?: WorkspaceBackend;
   pairedBackend?: PairedWorkspaceBackendV1;
   host: WorkspaceHost;
@@ -210,6 +224,8 @@ export interface PluginPromptEditor {
 export interface PluginRuntimeContext {
   state: AppState;
   prompt: PluginPromptEditor;
+  /** Host translation for plugin copy. Optional for older hosts. */
+  i18n?: PluginI18n;
   piWebUnstable?: PiWebUnstableRuntimeContext;
   openActionPalette: () => void;
   focusPrompt: () => void;
@@ -244,11 +260,17 @@ export interface PluginRuntimeContext {
 export interface PluginAction {
   id: LocalContributionId;
   title: string;
+  /** Host translation key; resolved at render time, falling back to `title`. */
+  titleKey?: string;
   description?: string;
+  /** Host translation key; resolved at render time, falling back to `description`. */
+  descriptionKey?: string;
   shortcut?: string;
   /** Former qualified action ids whose saved shortcut preference should still apply. */
   shortcutAliases?: QualifiedContributionId[];
   group?: string;
+  /** Host translation key; resolved at render time, falling back to `group`. */
+  groupKey?: string;
   enabled?: (context: PluginRuntimeContext) => boolean;
   /** Explain why a disabled action is visible but unavailable. */
   disabledReason?: (context: PluginRuntimeContext) => string | undefined;
@@ -289,6 +311,8 @@ export interface WorkspaceInvalidation {
 export interface WorkspacePanelContribution {
   id: LocalContributionId;
   title: string;
+  /** Host translation key; resolved at render time, falling back to `title`. */
+  titleKey?: string;
   icon?: WorkspacePanelIcon;
   order?: number;
   /** Former URL tool/view values that should resolve to this panel. */
@@ -315,6 +339,8 @@ export interface WorkspaceLabelContext extends WorkspaceContext {
   workspace: Workspace;
   state: AppState;
   files: WorkspaceFilesContextValue;
+  /** Host translation for plugin copy. Optional for older hosts. */
+  i18n?: PluginI18n;
   host: WorkspaceHost;
 }
 

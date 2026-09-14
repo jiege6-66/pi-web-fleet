@@ -17,7 +17,9 @@ const plugin: PiWebPlugin = {
         {
           id: "copy-diagnostics",
           title: "Copy PI WEB Diagnostics",
+          titleKey: "plugins.info.copyDiagnostics",
           description: "Copy version, installation, and status details for this machine, ready to paste into a bug report",
+          descriptionKey: "plugins.info.copyDiagnosticsDescription",
           group: "Info",
           run: (context) => copyDiagnostics(context),
         },
@@ -33,6 +35,7 @@ const plugin: PiWebPlugin = {
         {
           id: "workspace.info",
           title: "Info",
+          titleKey: "plugins.info.panelTitle",
           icon: svg`
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="9"></circle>

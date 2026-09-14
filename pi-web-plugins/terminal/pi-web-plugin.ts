@@ -47,6 +47,7 @@ export function activateTerminalPlugin(
       workspacePanels: [{
         id: "workspace.terminal",
         title: "Terminal",
+        titleKey: "plugins.terminal.panelTitle",
         icon,
         order: 30,
         routeAliases: ["core:workspace.terminal"],
@@ -58,9 +59,11 @@ export function activateTerminalPlugin(
       actions: [{
         id: "view.terminal",
         title: "Go to Terminal",
+        titleKey: "plugins.terminal.goTo",
         shortcut: "mod+4",
         shortcutAliases: ["core:view.terminal"],
         group: "Navigation",
+        groupKey: "plugins.common.groupNavigation",
         enabled: (runtimeContext: PluginRuntimeContext) => runtimeContext.state.selectedWorkspace !== undefined,
         run: (runtimeContext: PluginRuntimeContext) => { runtimeContext.openTerminal(); },
       }],

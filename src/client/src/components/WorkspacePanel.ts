@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import type { Workspace } from "../api";
 import type { QualifiedContributionId, QualifiedWorkspacePanelContribution, WorkspacePanelContext } from "../plugins/types";
 import { I18nController, t } from "../i18n";
+import { resolvePluginKey } from "../plugins/pluginI18n";
 import { workspacePanelStyles } from "./shared";
 
 export interface WorkspacePanelEmptyState {
@@ -102,15 +103,16 @@ export class WorkspacePanel extends LitElement {
   }
 
   private panelTabAriaLabel(panel: QualifiedWorkspacePanelContribution, badge: WorkspacePanelBadge): string {
-    if (typeof badge !== "string" && typeof badge !== "number") return panel.title;
+    const title = resolvePluginKey(panel.titleKey, panel.title);
+    if (typeof badge !== "string" && typeof badge !== "number") return title;
     const trimmedBadge = String(badge).trim();
-    return trimmedBadge === "" ? panel.title : `${panel.title}, ${trimmedBadge}`;
+    return trimmedBadge === "" ? title : `${title}, ${trimmedBadge}`;
   }
 
   private renderPanelTabContent(panel: QualifiedWorkspacePanelContribution, badge: WorkspacePanelBadge): TemplateResult {
     return html`
       ${panel.icon === undefined ? null : html`<span class="tab-custom-icon" aria-hidden="true">${panel.icon}</span>`}
-      <span class="tab-label">${panel.title}</span>
+      <span class="tab-label">${resolvePluginKey(panel.titleKey, panel.title)}</span>
       ${this.isEmptyBadge(badge) ? null : html`<span class="tab-badge">${badge}</span>`}
     `;
   }

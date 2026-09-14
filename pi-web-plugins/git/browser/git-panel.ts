@@ -341,18 +341,22 @@ function createGitActions(panelId: string, controller: GitUiController): PluginA
     {
       id: "view.git",
       title: "Go to Git",
+      titleKey: "plugins.git.goTo",
       shortcut: "mod+3",
       shortcutAliases: ["core:view.git"],
       group: "Navigation",
+      groupKey: "plugins.common.groupNavigation",
       enabled: hasGitWorkspace,
       run: (context) => { context.selectMainView(panelId); },
     },
     {
       id: "workspace.refresh-git",
       title: "Refresh Git",
+      titleKey: "plugins.git.refresh",
       shortcut: "mod+shift+g",
       shortcutAliases: ["core:workspace.refresh-git"],
       group: "Workspace",
+      groupKey: "plugins.common.groupWorkspace",
       enabled: hasGitWorkspace,
       run: (context) => context.refreshWorkspacePanels(panelId),
     },
@@ -367,6 +371,7 @@ function createGitPanel(
   return {
     id: GIT_PANEL_LOCAL_ID,
     title: "Git",
+    titleKey: "plugins.git.panelTitle",
     icon: svg`
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="6" cy="6" r="2"></circle>

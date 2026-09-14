@@ -14,8 +14,10 @@ const plugin: PiWebPlugin = {
           {
             id: "workspace.open-relays",
             title: "Open Workspace Relays",
+            titleKey: "plugins.relays.open",
             description: `Open the workspace Relays tab. Relays live in ${RELAYS_ROOT}.`,
             group: "Workspace",
+            groupKey: "plugins.common.groupWorkspace",
             enabled: (context) => context.state.selectedWorkspace !== undefined,
             run: (context) => {
               if (context.state.selectedWorkspace === undefined) return;
@@ -27,6 +29,7 @@ const plugin: PiWebPlugin = {
           {
             id: "workspace.relays",
             title: "Relays",
+            titleKey: "plugins.relays.panelTitle",
             icon: svg`
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 17H7A5 5 0 0 1 7 7h2"></path>
