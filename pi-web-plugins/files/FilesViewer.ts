@@ -1,10 +1,16 @@
-import type { FileContentResponse } from "@jmfederico/pi-web/plugin-api";
+import type { FileContentResponse, PluginI18n } from "@jmfederico/pi-web/plugin-api";
 import { css, html, LitElement, type PropertyValues, type TemplateResult } from "lit";
 import { property } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { renderWorkspaceMarkdownHtml } from "./workspaceMarkdown";
 import { workspaceFileViewModeStore, type WorkspaceFileViewMode, type WorkspaceFileViewModeStore } from "./workspaceFileViewMode";
+
+function tr(i18n: PluginI18n | undefined, key: string, fallback: string, params?: Readonly<Record<string, string | number>>): string {
+  if (i18n === undefined) return fallback;
+  const translated = i18n(key, params);
+  return translated === "" || translated === key ? fallback : translated;
+}
 
 export const DEFAULT_MAX_INLINE_PREVIEW_BYTES = 1024 * 1024;
 
@@ -41,6 +47,8 @@ export class WorkspaceFileViewer extends LitElement {
   @property({ attribute: false }) previewUrlBuilder: WorkspaceFilePreviewUrlBuilder = () => "about:blank";
   @property({ attribute: false }) modeStore: WorkspaceFileViewModeStore = workspaceFileViewModeStore;
   @property({ attribute: false }) maxInlinePreviewBytes = DEFAULT_MAX_INLINE_PREVIEW_BYTES;
+  /** Host translation handle, passed down by the panel; absent on older hosts. */
+  @property({ attribute: false }) i18n: PluginI18n | undefined;
 
   /** Undefined until the first render adopts the deep-linked or stored mode. */
   private mode: WorkspaceFileViewMode | undefined;
@@ -85,13 +93,13 @@ export class WorkspaceFileViewer extends LitElement {
 
   override render(): TemplateResult {
     const selectedPath = this.selectedPath;
-    if (selectedPath === undefined || selectedPath === "") return this.renderStatus("Select a file.");
-    if (this.loadError !== undefined) return this.renderStatus(`Unable to load ${selectedPath}: ${this.loadError}`, true);
+    if (selectedPath === undefined || selectedPath === "") return this.renderStatus(tr(this.i18n, "plugins.files.viewerSelectFile", "Select a file."));
+    if (this.loadError !== undefined) return this.renderStatus(`${tr(this.i18n, "plugins.files.viewerUnableToLoad", "Unable to load")} ${selectedPath}: ${this.loadError}`, true);
 
     const file = this.file;
-    if (file === undefined) return this.renderStatus(`Loading ${selectedPath}…`);
+    if (file === undefined) return this.renderStatus(`${tr(this.i18n, "plugins.files.viewerLoading", "Loading")} ${selectedPath}…`);
     if (file.path !== selectedPath) {
-      return this.renderStatus(`Unable to preview ${selectedPath}: loaded content belongs to ${file.path}.`, true);
+      return this.renderStatus(`${tr(this.i18n, "plugins.files.viewerUnableToPreview", "Unable to preview")} ${selectedPath}: loaded content belongs to ${file.path}.`, true);
     }
 
     const token = this.selectionToken;
@@ -106,7 +114,7 @@ export class WorkspaceFileViewer extends LitElement {
 
   private renderLoadedFile(file: FileContentResponse, kind: WorkspaceFilePreviewKind, token: number): TemplateResult {
     if (hasRawAndPreviewModes(file, kind) && this.mode === "raw") return this.renderRawSource(file);
-    if (file.size === 0) return this.renderStatus("This file is empty.");
+    if (file.size === 0) return this.renderStatus(tr(this.i18n, "plugins.files.viewerEmptyFile", "This file is empty."));
 
     switch (kind) {
       case "image": return this.renderImagePreview(file, token);
@@ -135,10 +143,10 @@ export class WorkspaceFileViewer extends LitElement {
               target="_blank"
               rel="noopener noreferrer"
               referrerpolicy="no-referrer"
-              title="Open in new window"
-            >Open ↗</a>
+              title=${tr(this.i18n, "plugins.files.viewerOpenNewWindow", "Open in new window")}
+            >${tr(this.i18n, "plugins.files.viewerOpen", "Open")} ↗</a>
           ` : null}
-          <a class="viewer-action" href=${downloadUrl} download=${name} title=${`Download ${name}`}>Download</a>
+          <a class="viewer-action" href=${downloadUrl} download=${name} title=${`${tr(this.i18n, "plugins.files.viewerDownload", "Download")} ${name}`}>${tr(this.i18n, "plugins.files.viewerDownload", "Download")}</a>
         </div>
       </div>
     `;
@@ -146,25 +154,25 @@ export class WorkspaceFileViewer extends LitElement {
 
   private renderModeControls(file: FileContentResponse, token: number): TemplateResult {
     return html`
-      <div class="viewer-mode" role="group" aria-label=${`View ${file.path}`}>
+      <div class="viewer-mode" role="group" aria-label=${`${tr(this.i18n, "plugins.files.viewerView", "View")} ${file.path}`}>
         <button
           type="button"
           aria-pressed=${this.mode === "preview" ? "true" : "false"}
           @click=${() => { this.setMode("preview", token); }}
-        >Preview</button>
+        >${tr(this.i18n, "plugins.files.viewerPreview", "Preview")}</button>
         <button
           type="button"
           aria-pressed=${this.mode === "raw" ? "true" : "false"}
           @click=${() => { this.setMode("raw", token); }}
-        >Raw</button>
+        >${tr(this.i18n, "plugins.files.viewerRaw", "Raw")}</button>
       </div>
     `;
   }
 
   private renderRawSource(file: FileContentResponse): TemplateResult {
-    if (file.size === 0) return this.renderStatus("This file is empty.");
+    if (file.size === 0) return this.renderStatus(tr(this.i18n, "plugins.files.viewerEmptyFile", "This file is empty."));
     return html`
-      ${file.truncated ? html`<p class="preview-note" role="status">Raw source is truncated. Use Download for the complete file.</p>` : null}
+      ${file.truncated ? html`<p class="preview-note" role="status">${tr(this.i18n, "plugins.files.viewerRawTruncated", "Raw source is truncated. Use Download for the complete file.")}</p>` : null}
       <pi-web-files-code-viewer .content=${file.content} .language=${file.language}></pi-web-files-code-viewer>
     `;
   }
@@ -174,11 +182,11 @@ export class WorkspaceFileViewer extends LitElement {
     try {
       const sanitized = renderWorkspaceMarkdownHtml(file.content);
       return html`
-        ${file.truncated ? html`<p class="preview-note" role="status">Preview is rendered from truncated source. Use Download for the complete file.</p>` : null}
+        ${file.truncated ? html`<p class="preview-note" role="status">${tr(this.i18n, "plugins.files.viewerPreviewTruncated", "Preview is rendered from truncated source. Use Download for the complete file.")}</p>` : null}
         <div class="formatted markdown-preview" dir="auto">${unsafeHTML(sanitized)}</div>
       `;
     } catch {
-      return this.renderStatus("Markdown preview failed. Use Raw or Download instead.", true);
+      return this.renderStatus(tr(this.i18n, "plugins.files.viewerMarkdownFailed", "Markdown preview failed. Use Raw or Download instead."), true);
     }
   }
 
@@ -190,7 +198,7 @@ export class WorkspaceFileViewer extends LitElement {
       <div class="image-preview">
         <img
           src=${src}
-          alt=${`Preview of ${file.path}`}
+          alt=${`${tr(this.i18n, "plugins.files.viewerPreviewOf", "Preview of")} ${file.path}`}
           decoding="async"
           referrerpolicy="no-referrer"
           @error=${() => { this.recordPreviewFailure(token); }}
@@ -221,9 +229,9 @@ export class WorkspaceFileViewer extends LitElement {
   private renderPreviewFailure(file: FileContentResponse, token: number): TemplateResult {
     return html`
       <div class="preview-state" role="alert">
-        <strong>Preview failed for ${file.path}.</strong>
-        <span>Open it in a new window or use Download above.</span>
-        <button type="button" @click=${() => { this.retryPreview(token); }}>Retry preview</button>
+        <strong>${tr(this.i18n, "plugins.files.viewerPreviewFailed", "Preview failed for")} ${file.path}.</strong>
+        <span>${tr(this.i18n, "plugins.files.viewerPreviewFailedHint", "Open it in a new window or use Download above.")}</span>
+        <button type="button" @click=${() => { this.retryPreview(token); }}>${tr(this.i18n, "plugins.files.viewerRetryPreview", "Retry preview")}</button>
       </div>
     `;
   }
@@ -237,14 +245,14 @@ export class WorkspaceFileViewer extends LitElement {
     });
     return html`
       <div class="preview-state">
-        <p>Preview isn't available for this file type.</p>
-        <a class="download-link" href=${href} download=${name}>Download ${name} · ${formatFileSize(file.size)}</a>
+        <p>${tr(this.i18n, "plugins.files.viewerUnsupported", "Preview isn't available for this file type.")}</p>
+        <a class="download-link" href=${href} download=${name}>${tr(this.i18n, "plugins.files.viewerDownload", "Download")} ${name} · ${formatFileSize(file.size)}</a>
       </div>
     `;
   }
 
   private renderPreviewTooLarge(file: FileContentResponse): TemplateResult {
-    return this.renderStatus(`File too large to preview: ${formatFileSize(file.size)} · limit ${formatFileSize(this.maxInlinePreviewBytes)}. Use Download above.`);
+    return this.renderStatus(`${tr(this.i18n, "plugins.files.viewerTooLarge", "File too large to preview:")} ${formatFileSize(file.size)} · ${tr(this.i18n, "plugins.files.viewerLimit", "limit")} ${formatFileSize(this.maxInlinePreviewBytes)}. ${tr(this.i18n, "plugins.files.viewerUseDownload", "Use Download above.")}`);
   }
 
   private renderStatus(message: string, alert = false): TemplateResult {

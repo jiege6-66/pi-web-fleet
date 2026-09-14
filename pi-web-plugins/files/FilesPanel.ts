@@ -145,6 +145,7 @@ export class WorkspaceFilesPanel extends LitElement {
           </div>
           <div class="viewer">
             <pi-web-files-viewer
+              .i18n=${context.i18n}
               .machineId=${context.machine.id}
               .projectId=${context.workspace.projectId}
               .workspaceId=${context.workspace.id}
