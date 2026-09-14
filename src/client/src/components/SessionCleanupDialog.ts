@@ -2,6 +2,7 @@ import { LitElement, css, html, type PropertyValues, type TemplateResult } from 
 import { customElement, property, state } from "lit/decorators.js";
 import type { SessionCleanupExecuteResponse, SessionCleanupPreviewResponse, SessionCleanupProjectSummary, SessionCleanupRequest } from "../api";
 import { canRunSessionCleanup, confirmSessionCleanup, DEFAULT_SESSION_CLEANUP_DRAFT, selectedSessionCleanupProjectCwds, sessionCleanupPreviewForSelectedProjects, sessionCleanupPreviewHasTargets, sessionCleanupRequestKey, validateSessionCleanupDraft, type SessionCleanupDraft } from "../sessionCleanupUi";
+import { I18nController, t } from "../i18n";
 import "./ModalSurface";
 
 @customElement("session-cleanup-dialog")
@@ -19,6 +20,7 @@ export class SessionCleanupDialog extends LitElement {
   @state() private draft: SessionCleanupDraft = { ...DEFAULT_SESSION_CLEANUP_DRAFT };
   @state() private formError = "";
   @state() private selectedProjectCwds: string[] | undefined;
+  private readonly i18n = new I18nController(this);
 
   override willUpdate(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has("preview")) this.selectedProjectCwds = this.preview?.projects.map((project) => project.cwd);
@@ -28,15 +30,15 @@ export class SessionCleanupDialog extends LitElement {
     const validation = validateSessionCleanupDraft(this.draft);
     const selectedPreview = this.selectedPreview();
     const runEnabled = canRunSessionCleanup({ draft: this.draft, preview: selectedPreview, previewRequest: this.previewRequest, loading: this.loading, running: this.running });
-    const runTitle = runEnabled ? "Run cleanup" : selectedPreview !== undefined && !sessionCleanupPreviewHasTargets(selectedPreview) ? "Select at least one project to run cleanup" : "Preview cleanup before running it";
+    const runTitle = runEnabled ? t("session.runCleanup") : selectedPreview !== undefined && !sessionCleanupPreviewHasTargets(selectedPreview) ? "Select at least one project to run cleanup" : "Preview cleanup before running it";
     return html`
-      <modal-surface .onClose=${() => { this.onClose?.(); }} .label=${"Clean up sessions"}>
+      <modal-surface .onClose=${() => { this.onClose?.(); }} .label=${t("session.cleanUpSessions")}>
         <header>
           <div>
-            <span class="eyebrow">Sessions</span>
-            <h1>Clean up sessions</h1>
+            <span class="eyebrow">${t("nav.sessions")}</span>
+            <h1>${t("session.cleanUpSessions")}</h1>
           </div>
-          <button class="close-button" title="Close cleanup" aria-label="Close cleanup" @click=${() => { this.onClose?.(); }}>×</button>
+          <button class="close-button" title=${t("session.closeCleanup")} aria-label=${t("session.closeCleanup")} @click=${() => { this.onClose?.(); }}>×</button>
         </header>
         <div class="body">
           <p class="intro">Preview manual cleanup for this machine before archiving idle sessions or permanently deleting old archived sessions.</p>
@@ -46,9 +48,9 @@ export class SessionCleanupDialog extends LitElement {
           ${this.result === undefined ? null : this.renderResult(this.result)}
         </div>
         <footer>
-          <button @click=${() => { this.onClose?.(); }}>${this.result === undefined ? "Cancel" : "Close"}</button>
-          <button ?disabled=${this.loading || this.running} @click=${() => { this.previewCleanup(); }}>${this.loading ? "Previewing…" : "Preview"}</button>
-          <button class="danger" ?disabled=${!runEnabled} title=${runTitle} @click=${() => { this.runCleanup(); }}>${this.running ? "Running…" : "Run cleanup"}</button>
+          <button @click=${() => { this.onClose?.(); }}>${this.result === undefined ? t("common.cancel") : t("common.close")}</button>
+          <button ?disabled=${this.loading || this.running} @click=${() => { this.previewCleanup(); }}>${this.loading ? t("session.previewing") : t("session.preview")}</button>
+          <button class="danger" ?disabled=${!runEnabled} title=${runTitle} @click=${() => { this.runCleanup(); }}>${this.running ? t("session.runningCleanup") : t("session.runCleanup")}</button>
         </footer>
       </modal-surface>
     `;
@@ -90,7 +92,7 @@ export class SessionCleanupDialog extends LitElement {
     const selectedPreview = sessionCleanupPreviewForSelectedProjects(preview, selectedCwds);
     return html`
       <section class="preview" aria-label="Cleanup preview">
-        <h2>Preview</h2>
+        <h2>${t("session.preview")}</h2>
         ${preview.projects.length === 0 ? html`<p class="empty">No sessions match these thresholds.</p>` : html`
           ${this.renderSelectionControls(preview, selectedCwds)}
           <div class="table-scroll" tabindex="0" aria-label="Cleanup projects table">

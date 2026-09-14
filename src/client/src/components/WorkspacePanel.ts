@@ -2,6 +2,7 @@ import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Workspace } from "../api";
 import type { QualifiedContributionId, QualifiedWorkspacePanelContribution, WorkspacePanelContext } from "../plugins/types";
+import { I18nController, t } from "../i18n";
 import { workspacePanelStyles } from "./shared";
 
 export interface WorkspacePanelEmptyState {
@@ -23,6 +24,7 @@ export class WorkspacePanel extends LitElement {
   @query(".workspace-header-strip") private workspaceHeaderStrip?: HTMLElement | null;
   @state() private workspaceHeaderCanScrollLeft = false;
   @state() private workspaceHeaderCanScrollRight = false;
+  private readonly i18n = new I18nController(this);
 
   private observedWorkspaceHeaderStrip: HTMLElement | undefined;
   private workspaceHeaderResizeObserver: ResizeObserver | undefined;
@@ -50,13 +52,13 @@ export class WorkspacePanel extends LitElement {
   override render() {
     const workspace = this.workspace;
     if (workspace === undefined) return this.renderEmptyState(this.emptyState ?? {
-      title: "Select a workspace",
-      body: "Choose a workspace to use its tools.",
+      title: t("files.selectWorkspace"),
+      body: t("files.selectWorkspaceBody"),
     });
     const context = this.panelContext;
     if (context === undefined) return this.renderEmptyState({
-      title: "Workspace tools unavailable",
-      body: "Try selecting the workspace again.",
+      title: t("files.workspaceToolsUnavailable"),
+      body: t("files.workspaceToolsUnavailableBody"),
     });
     const visiblePanels = this.panels;
     const selectedPanel = visiblePanels.find((panel) => panel.id === this.tool) ?? visiblePanels[0];

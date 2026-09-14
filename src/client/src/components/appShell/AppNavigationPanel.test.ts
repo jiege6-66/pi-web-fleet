@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
+import { i18n, setLocale } from "../../i18n";
 import type { Machine, Project, Workspace } from "../../api";
 import type { MachineStatusSnapshot } from "../../../../shared/machineStatus";
 import { machineStatusSnapshot } from "../../machineStatus.testSupport";
@@ -44,6 +45,25 @@ describe("header identity", () => {
     const panel = await mountHeaderPanel([machine("local")], true);
 
     expect(section(panel, "machine-switcher", MachineSwitcher).locationIndicator).toBe(true);
+  });
+
+  it("renders language selector and switches interface language", async () => {
+    setLocale("en");
+    const panel = await mountHeaderPanel([machine("local")]);
+    const select = panel.shadowRoot?.querySelector<HTMLSelectElement>("select.lang-select");
+    expect(select).not.toBeNull();
+    expect(select?.value).toBe("en");
+    expect(panel.shadowRoot?.querySelector(".header-actions button")?.textContent).toBe("Actions");
+
+    if (select) {
+      select.value = "zh-CN";
+      select.dispatchEvent(new Event("change"));
+    }
+    await panel.updateComplete;
+
+    expect(i18n.getLocale()).toBe("zh-CN");
+    expect(panel.shadowRoot?.querySelector(".header-actions button")?.textContent).toBe("操作");
+    setLocale("en");
   });
 });
 

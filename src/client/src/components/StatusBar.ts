@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { SessionStatus } from "../api";
 import { formatCost, formatTokenCount } from "../utils/format";
+import { I18nController, t } from "../i18n";
 import { renderSessionWarningIcon, statusBarStyles } from "./shared";
 
 export interface StatusBarWarningControlContent {
@@ -24,6 +25,7 @@ export class StatusBar extends LitElement {
   @property({ type: Number }) warningCount = 0;
   @property({ type: Boolean }) warningsExpanded = false;
   @property({ attribute: false }) onToggleWarnings?: () => void;
+  private readonly i18n = new I18nController(this);
 
   private readonly handleToggleWarnings = (): void => {
     this.onToggleWarnings?.();
@@ -31,13 +33,13 @@ export class StatusBar extends LitElement {
 
   override render() {
     const status = this.status;
-    if (status === undefined) return html`<div class="bar muted">No session status yet</div>`;
+    if (status === undefined) return html`<div class="bar muted">${t("session.noStatusYet")}</div>`;
     const context = status.contextUsage;
     const contextText = context
       ? context.percent == null
-        ? `context ${formatTokenCount(context.contextWindow)}`
+        ? t("session.contextUsage", { window: formatTokenCount(context.contextWindow) })
         : `${context.percent.toFixed(1)}%/${formatTokenCount(context.contextWindow)}`
-      : "context unknown";
+      : t("session.contextUnknown");
     const tokens = status.tokens;
     const warningControl = statusBarWarningControlContent(this.warningCount, this.warningsExpanded);
     return html`
@@ -59,7 +61,7 @@ export class StatusBar extends LitElement {
         <span>↓${formatTokenCount(tokens.output)}</span>
         <span class="context">${contextText}</span>
         <span>${formatCost(status.cost)}</span>
-        ${status.pendingMessageCount > 0 ? html`<span>${String(status.pendingMessageCount)} queued</span>` : null}
+        ${status.pendingMessageCount > 0 ? html`<span>${t("session.queuedCount", { count: status.pendingMessageCount })}</span>` : null}
       </div>
     `;
   }

@@ -19,6 +19,7 @@ import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendProm
 import { promptEditorStyles, type CompletionItem } from "./shared";
 import { renderAttachIcon, renderSendIcon, renderQueueIcon, renderSteerIcon, renderStopIcon, renderThinkingGauge } from "./promptEditorIcons";
 import { thinkingGauge, thinkingLevelLabel } from "../../../shared/thinkingLevels";
+import { I18nController, t } from "../i18n";
 import "./AutocompleteMenu";
 
 @customElement("prompt-editor")
@@ -65,7 +66,10 @@ export class PromptEditor extends LitElement {
   private editor: EditorView | undefined;
   private readonly editableCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
+  private readonly placeholderCompartment = new Compartment();
   private readonly mobilePromptEnterMedia = createMobilePromptEnterMedia();
+  private readonly i18n = new I18nController(this);
+  private currentLocale = this.i18n.locale;
   private explicitShiftKeyActive = false;
 
   protected override willUpdate(changed: PropertyValues<this>) {
@@ -104,6 +108,12 @@ export class PromptEditor extends LitElement {
   protected override updated(changed: PropertyValues) {
     if (changed.has("disabled")) this.updateEditorDisabledState();
     if (changed.has("sessionId") || changed.has("machineId")) this.syncEditorDoc();
+    if (this.currentLocale !== this.i18n.locale) {
+      this.currentLocale = this.i18n.locale;
+      this.editor?.dispatch({
+        effects: this.placeholderCompartment.reconfigure(placeholder(t("chat.messagePlaceholder"))),
+      });
+    }
   }
 
   override disconnectedCallback(): void {
@@ -122,7 +132,7 @@ export class PromptEditor extends LitElement {
         <div class="editor-wrap">
           <div class=${`markdown-editor${this.disabled ? " markdown-editor-disabled" : ""}`} aria-label="Message pi" aria-disabled=${this.disabled ? "true" : "false"}></div>
           <input class="attachment-input" type="file" multiple hidden @change=${(event: Event) => { void this.handleFileInput(event); }} />
-          <button class="editor-attach icon-button" ?disabled=${busy} title="Attach files" aria-label="Attach files" @click=${() => { this.attachmentInput?.click(); }}>${renderAttachIcon()}</button>
+          <button class="editor-attach icon-button" ?disabled=${busy} title=${t("chat.attachFiles")} aria-label=${t("chat.attachFiles")} @click=${() => { this.attachmentInput?.click(); }}>${renderAttachIcon()}</button>
           ${shellMode ? html`<div class="mode-hint">Shell command${shellInputMode.excludeFromContext ? " · excluded from context" : ""}</div>` : null}
           ${this.isCompacting && !shellMode ? html`<div class="mode-hint">Compacting history · message will be queued</div>` : null}
           ${this.renderAttachments()}
@@ -130,9 +140,9 @@ export class PromptEditor extends LitElement {
         </div>
         <div class="actions">
           ${this.renderCompactStatus()}
-          <button class="icon-button send-button" ?disabled=${busy} title=${queuesInput ? "Queue until the current activity finishes" : "Send message"} aria-label=${queuesInput ? "Queue message" : "Send message"} @click=${() => { this.send("followUp"); }}>${queuesInput ? renderQueueIcon() : renderSendIcon()}</button>
-          ${this.canSteer && !this.isCompacting ? html`<button class="icon-button steer-button" ?disabled=${busy} title="Steer the current response before the next model call" aria-label="Steer current response" @click=${() => { this.send("steer"); }}>${renderSteerIcon()}</button>` : null}
-          <button class="icon-button stop-button" ?disabled=${this.disabled || !this.canStop} title=${this.canStop ? "Stop current work and clear queued messages" : "Nothing running"} aria-label="Stop current work" @click=${() => this.onStop?.()}>${renderStopIcon()}</button>
+          <button class="icon-button send-button" ?disabled=${busy} title=${queuesInput ? t("chat.queue") : t("chat.send")} aria-label=${queuesInput ? t("chat.queue") : t("chat.send")} @click=${() => { this.send("followUp"); }}>${queuesInput ? renderQueueIcon() : renderSendIcon()}</button>
+          ${this.canSteer && !this.isCompacting ? html`<button class="icon-button steer-button" ?disabled=${busy} title=${t("chat.steer")} aria-label=${t("chat.steer")} @click=${() => { this.send("steer"); }}>${renderSteerIcon()}</button>` : null}
+          <button class="icon-button stop-button" ?disabled=${this.disabled || !this.canStop} title=${this.canStop ? t("chat.stop") : "Nothing running"} aria-label=${t("chat.stop")} @click=${() => this.onStop?.()}>${renderStopIcon()}</button>
         </div>
       </footer>
     `;
@@ -176,8 +186,8 @@ export class PromptEditor extends LitElement {
     const provider = status.model?.provider !== undefined && status.model.provider !== "" ? `${status.model.provider}/` : "";
     return html`
       <div class="compact-status" aria-label="Session status">
-        <button class="select-model" title="Select model" @click=${() => this.onSelectModel?.()}>${provider}${model}</button>
-        <button class="select-thinking icon-button" title=${`Thinking level: ${thinkingLevelLabel(status.thinkingLevel)}`} aria-label=${`Thinking level: ${thinkingLevelLabel(status.thinkingLevel)}`} @click=${() => this.onSelectThinking?.()}>${renderThinkingGauge(thinkingGauge(status.thinkingLevel, this.availableThinkingLevels))}</button>
+        <button class="select-model" title=${t("chat.selectModel")} @click=${() => this.onSelectModel?.()}>${provider}${model}</button>
+        <button class="select-thinking icon-button" title=${t("chat.thinkingLevel", { level: thinkingLevelLabel(status.thinkingLevel) })} aria-label=${t("chat.thinkingLevel", { level: thinkingLevelLabel(status.thinkingLevel) })} @click=${() => this.onSelectThinking?.()}>${renderThinkingGauge(thinkingGauge(status.thinkingLevel, this.availableThinkingLevels))}</button>
       </div>
     `;
   }
@@ -294,7 +304,7 @@ export class PromptEditor extends LitElement {
             keyup: (event) => this.handleEditorKeyUp(event),
             blur: () => this.resetEditorModifierState(),
           }),
-          placeholder("Message pi... Use / for commands, @ for tracked files, @ space for all files, # for models"),
+          this.placeholderCompartment.of(placeholder(t("chat.messagePlaceholder"))),
           promptArgumentHintExtension,
           this.editableCompartment.of(EditorView.editable.of(!this.disabled)),
           this.readOnlyCompartment.of(EditorState.readOnly.of(this.disabled)),

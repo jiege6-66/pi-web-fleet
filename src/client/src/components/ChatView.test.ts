@@ -19,7 +19,7 @@ import {
   chatQueuedSectionShowsClearAction,
   chatSessionWarningRows,
 } from "./ChatView";
-import { templateEventHandlerAfterMarker, templateEventHandlerNearMarker } from "../templateInspection.testSupport";
+import { templateEventHandlerAfterMarker } from "../templateInspection.testSupport";
 
 describe("chatQueuedMessageSections", () => {
   it("labels client-side pending-start sends separately from server queued messages", () => {
@@ -68,15 +68,15 @@ describe("ChatView queued-message clear wiring", () => {
   // Escape hatch: this case verifies the Clear queue button's Lit event wiring,
   // whose only observable effect is invoking the injected callback. Vitest runs
   // with no DOM environment here, so a shadow-DOM click harness would add
-  // disproportionate setup; handler extraction anchored to the user-facing
-  // "Clear queue" button text is proportionate.
+  // disproportionate setup; handler extraction anchored to the button's stable
+  // class markup is proportionate (the label itself is translated).
   it("invokes onClearServerQueue when the server-queue action is activated", () => {
     const view = new ChatView();
     const onClearServerQueue = vi.fn();
     view.status = queuedStatus([{ kind: "steer", text: "server queued" }]);
     view.onClearServerQueue = onClearServerQueue;
 
-    templateEventHandlerNearMarker(renderQueuedMessages(view), "Clear queue")(new Event("click"));
+    templateEventHandlerAfterMarker(renderQueuedMessages(view), "queued-clear-button")(new Event("click"));
 
     expect(onClearServerQueue).toHaveBeenCalledOnce();
   });

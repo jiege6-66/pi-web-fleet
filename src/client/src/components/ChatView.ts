@@ -27,6 +27,7 @@ import {
 } from "../sessionNotifications";
 import type { ChatLine, ChatPart } from "./shared";
 import { chatStyles, renderSessionWarningIcon } from "./shared";
+import { I18nController, t } from "../i18n";
 import "./AskUserCard";
 import "./ExtensionDialogCard";
 import type { ExtensionDialogAnswerCallback, ExtensionDialogCancelCallback, ExtensionDialogDismissCallback } from "./ExtensionDialogCard";
@@ -227,6 +228,7 @@ export class ChatView extends LitElement {
   private imageZoomModalRegistration: RenderedModalRegistration | undefined;
   private readonly disclosures = new ChatDisclosureController();
   private readonly scrollController = new ChatScrollController();
+  private readonly i18n = new I18nController(this);
   private suppressScrollSave = false;
   private suppressLoadMoreRequests = false;
   private loadMoreCheckFrame: number | undefined;
@@ -457,7 +459,7 @@ export class ChatView extends LitElement {
     const totalCount = notificationInboxTotalCount(inbox);
     if (totalCount === 0 && !hasPendingOverlay && !retainsFocusTarget) return null;
     const collapsed = notificationTrayIsCollapsed(this.collapsedNotificationTargetKeys, inbox);
-    const toggleLabel = collapsed ? "Expand notifications" : "Collapse notifications";
+    const toggleLabel = collapsed ? t("chat.expandNotifications") : t("chat.collapseNotifications");
     return html`
       <section class=${`notification-tray${collapsed ? " collapsed" : ""}`} role="region" aria-labelledby="session-notifications-heading" @focusout=${(event: FocusEvent) => { this.releaseEmptyNotificationTray(event); }}>
         <header class="notification-header" data-notification-focus="header" tabindex="-1">
@@ -466,11 +468,11 @@ export class ChatView extends LitElement {
             <button
               type="button"
               class="notification-control notification-clear"
-              aria-label="Clear all notifications"
-              title="Clear all notifications"
+              aria-label=${t("chat.clearAllNotifications")}
+              title=${t("chat.clearAllNotifications")}
               ?disabled=${inbox.dismissAllPending || totalCount === 0 || this.onDismissAllNotifications === undefined}
               @click=${() => { this.dismissAllNotifications(); }}
-            >Clear</button>
+            >${t("chat.clear")}</button>
             <button
               type="button"
               class="notification-control notification-toggle"
@@ -502,7 +504,7 @@ export class ChatView extends LitElement {
                   type="button"
                   class="notification-row-dismiss"
                   aria-label=${notificationDismissLabel(notification)}
-                  title="Dismiss notification"
+                  title=${t("chat.dismissNotification")}
                   ?disabled=${inbox.pendingDismissedIds.has(notification.id) || inbox.dismissAllPending || this.onDismissNotification === undefined}
                   @click=${() => { this.dismissNotification(notification.id); }}
                 >${renderNotificationCloseIcon()}</button>
@@ -589,14 +591,14 @@ export class ChatView extends LitElement {
             <button
               type="button"
               class="session-warnings-collapse"
-              title="Minimise warnings"
-              aria-label="Minimise warnings"
+              title=${t("chat.minimiseWarnings")}
+              aria-label=${t("chat.minimiseWarnings")}
               @click=${this.handleToggleWarnings}
             >
               <svg class="session-warnings-collapse-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="m18 15-6-6-6 6"></path>
               </svg>
-              <span>Minimise</span>
+              <span>${t("chat.minimise")}</span>
             </button>
           </div>
         `}
@@ -616,7 +618,7 @@ export class ChatView extends LitElement {
               <button
                 type="button"
                 class="session-warning-dismiss"
-                title="Don't show this warning again"
+                title=${t("chat.dontShowWarning")}
                 aria-label="Dismiss warning"
                 @click=${() => { this.onDismissWarning?.(dismissId); }}
               >×</button>
@@ -664,7 +666,7 @@ export class ChatView extends LitElement {
       return html`
         <div class="activity-dock active" aria-live="polite">
           <span class="dot"></span>
-          <span class="activity-text">Sending your message…</span>
+          <span class="activity-text">${t("chat.sendingMessage")}</span>
         </div>
       `;
     }
@@ -686,20 +688,22 @@ export class ChatView extends LitElement {
 
   private renderQueuedMessageList(section: QueuedMessageSection) {
     const canClear = chatQueuedSectionShowsClearAction(section, this.onClearServerQueue !== undefined);
+    const heading = section.source === "client" ? t("chat.queuedUntilStart") : t("chat.queuedMessages");
+    const detail = section.source === "client" ? t("chat.willSendWhenReady") : t("chat.pendingCount", { count: section.messages.length });
     return html`
       <aside class="queued-messages" aria-live="polite">
         <div class="queued-header">
           <div class="queued-heading">
-            <strong>${section.heading}</strong>
-            <small>${section.detail}</small>
+            <strong>${heading}</strong>
+            <small>${detail}</small>
           </div>
           ${canClear ? html`
-            <button type="button" class="queued-clear-button" title="Clear queued messages without stopping active work" @click=${this.handleClearServerQueue}>Clear queue</button>
+            <button type="button" class="queued-clear-button" title=${t("chat.clearQueueHint")} @click=${this.handleClearServerQueue}>${t("chat.clearQueue")}</button>
           ` : null}
         </div>
         ${section.messages.map((message, index) => html`
           <div class="queued-message">
-            <span class="queued-kind">${message.kind === "steer" ? "Steer" : "Follow-up"} ${String(index + 1)}</span>
+            <span class="queued-kind">${message.kind === "steer" ? t("chat.steer") : t("chat.followUp")} ${String(index + 1)}</span>
             <formatted-text .text=${message.text}></formatted-text>
           </div>
         `)}
@@ -755,8 +759,8 @@ export class ChatView extends LitElement {
     if (!this.isCompacting) return null;
     return html`
       <aside class="session-activity compacting" aria-live="polite">
-        <strong>Compacting history…</strong>
-        <span>The agent is summarizing earlier context. New prompts will be queued until compaction finishes.</span>
+        <strong>${t("chat.compactingHistory")}</strong>
+        <span>${t("chat.compactingDetail")}</span>
         ${this.pendingMessageCount > 0 ? html`<small>${this.pendingMessageCount} queued ${this.pendingMessageCount === 1 ? "message" : "messages"}</small>` : null}
       </aside>
     `;
@@ -772,10 +776,33 @@ export class ChatView extends LitElement {
     return "idle";
   }
 
+  private activityStateLabel(state: string): string {
+    switch (state) {
+      case "compacting": return t("chat.activityCompacting");
+      case "bash": return t("chat.activityBash");
+      case "running": return t("chat.activityRunning");
+      case "queued": return t("chat.activityQueued");
+      case "idle": return t("chat.activityIdle");
+      default: return state;
+    }
+  }
+
+  /** Localized role label for a message header; unknown roles pass through. */
+  private roleLabel(role: string): string {
+    switch (role) {
+      case "user": return t("chat.roleUser");
+      case "assistant": return t("chat.roleAssistant");
+      case "tool": return t("chat.roleTool");
+      case "system": return t("chat.roleSystem");
+      default: return role;
+    }
+  }
+
   private activityText(state: string): string {
     const activity = this.activity;
-    if (activity === undefined) return state;
-    if (state !== "idle" && activity.phase === "idle") return state;
+    const stateLabel = this.activityStateLabel(state);
+    if (activity === undefined) return stateLabel;
+    if (state !== "idle" && activity.phase === "idle") return stateLabel;
     return activity.detail !== undefined && activity.detail !== "" ? `${activity.label}: ${activity.detail}` : activity.label;
   }
 
@@ -801,15 +828,15 @@ export class ChatView extends LitElement {
 
   private renderHistoryBoundary() {
     const range = this.historyRangeLabel();
-    if (this.loadingMore) return html`<div class="history-boundary"><span>Loading earlier messages…</span>${range}</div>`;
+    if (this.loadingMore) return html`<div class="history-boundary"><span>${t("chat.loadingEarlier")}</span>${range}</div>`;
     if (this.hasMore) return html`
       <div class="history-boundary">
-        <button type="button" class="history-load-button" ?disabled=${this.loadMoreRequested} @click=${() => { this.requestLoadMore(); }}>Load earlier messages</button>
-        <span>Scroll up to load earlier messages</span>
+        <button type="button" class="history-load-button" ?disabled=${this.loadMoreRequested} @click=${() => { this.requestLoadMore(); }}>${t("chat.loadEarlier")}</button>
+        <span>${t("chat.scrollUpEarlier")}</span>
         ${range}
       </div>
     `;
-    if (this.messages.length) return html`<div class="history-boundary"><span>Beginning of session</span>${range}</div>`;
+    if (this.messages.length) return html`<div class="history-boundary"><span>${t("chat.beginningOfSession")}</span>${range}</div>`;
     return null;
   }
 
@@ -818,7 +845,7 @@ export class ChatView extends LitElement {
     const from = this.messageStart + 1;
     const to = this.loadedRawMessageEnd();
     const total = Math.max(this.messageTotal, to);
-    return html`<small>Showing messages ${from}–${to} of ${total}</small>`;
+    return html`<small>${t("chat.showingMessages", { from, to, total })}</small>`;
   }
 
   private loadedRawMessageEnd(): number {
@@ -839,7 +866,7 @@ export class ChatView extends LitElement {
   }
 
   private renderToolImageOutput(message: ChatLine, index: number, toolName?: string) {
-    const label = chatToolOutputLabel(toolName);
+    const label = toolName === undefined || toolName === "" ? t("chat.toolOutput") : t("chat.namedToolOutput", { name: toolName });
     return html`
       ${this.renderScrollMarker(this.messageScrollMarkerId(index))}
       <article class="msg tool-image-output" data-index=${index} data-scroll-anchor-id=${this.messageAnchorKey(index)}>
@@ -892,7 +919,7 @@ export class ChatView extends LitElement {
     return html`<span class="scroll-marker" data-marker-id=${markerId} aria-hidden="true"></span>`;
   }
 
-  private renderMessageHeader(message: ChatLine, key: string, label: string = message.role) {
+  private renderMessageHeader(message: ChatLine, key: string, label: string = this.roleLabel(message.role)) {
     const meta = this.messageMetaLabel(message);
     const expanded = this.expandedMetaKey === key;
     return html`
@@ -910,8 +937,8 @@ export class ChatView extends LitElement {
     if (!this.isCopyableMessage(message)) return null;
     const copied = this.copiedMessageKey === key;
     return html`
-      <div class="msg-actions" aria-label="Message actions">
-        <button type="button" class="msg-action" title=${copied ? "Copied" : "Copy message"} aria-label=${`${copied ? "Copied" : "Copy"} ${message.role} message`} @click=${(event: MouseEvent) => { void this.copyMessage(message, key, event); }}>
+      <div class="msg-actions" aria-label=${t("chat.messageActions")}>
+        <button type="button" class="msg-action" title=${copied ? t("chat.copied") : t("chat.copyMessage")} aria-label=${copied ? t("chat.copiedRoleMessage", { role: this.roleLabel(message.role) }) : t("chat.copyRoleMessage", { role: this.roleLabel(message.role) })} @click=${(event: MouseEvent) => { void this.copyMessage(message, key, event); }}>
           <span aria-hidden="true">${copied ? "✓" : "⧉"}</span>
         </button>
       </div>
@@ -962,7 +989,7 @@ export class ChatView extends LitElement {
   private renderPart(part: ChatPart, message?: ChatLine) {
     if (part.type === "text" && message?.role === "bash") return html`<pre class="part shell-output">${part.text}</pre>`;
     if (part.type === "text") return html`<formatted-text class="part" .text=${part.text}></formatted-text>`;
-    if (part.type === "thinking") return html`<details class="part"><summary>thinking</summary><formatted-text .text=${part.text}></formatted-text></details>`;
+    if (part.type === "thinking") return html`<details class="part"><summary>${t("chat.thinking")}</summary><formatted-text .text=${part.text}></formatted-text></details>`;
     if (part.type === "skillInvocation") return html`
       <details class="part skill-invocation">
         <summary><b>[skill]</b> ${part.name}</summary>

@@ -7,6 +7,7 @@ import { actionMenuPanelStyle } from "./actionMenu";
 import { hasStatusUnread, renderActivityIndicator, statusActivityKind } from "./activityBadge";
 import { canRemoveMachine } from "./MachineList";
 import type { KeyboardNavigableSection } from "./navigationFocus";
+import { I18nController, t } from "../i18n";
 
 @customElement("machine-switcher")
 export class MachineSwitcher extends LitElement implements KeyboardNavigableSection {
@@ -25,6 +26,7 @@ export class MachineSwitcher extends LitElement implements KeyboardNavigableSect
   @state() private menuStyle = "";
   @state() private openActionsMachineId: string | undefined;
   @state() private actionMenuStyle = "";
+  private readonly i18n = new I18nController(this);
 
   private readonly onDocumentClick = (event: MouseEvent) => {
     if (event.composedPath().includes(this)) return;
@@ -115,14 +117,14 @@ export class MachineSwitcher extends LitElement implements KeyboardNavigableSect
             <button
               type="button"
               class="machine-option-actions-toggle"
-              title="Machine actions"
+              title=${t("nav.machineActions")}
               aria-label=${`Actions for ${machine.name}`}
               aria-expanded=${String(actionsOpen)}
               @click=${(event: MouseEvent) => { event.stopPropagation(); this.toggleActionsMenu(machine.id, event.currentTarget); }}
             >⋯</button>
             ${actionsOpen ? html`
               <div class="machine-option-actions-panel" style=${this.actionMenuStyle} @click=${(event: MouseEvent) => { event.stopPropagation(); }}>
-                <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>Remove</button>
+                <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
               </div>
             ` : null}
           </div>

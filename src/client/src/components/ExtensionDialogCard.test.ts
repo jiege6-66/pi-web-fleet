@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PendingExtensionDialog } from "../../../shared/apiTypes";
 import type { ClosedExtensionDialog } from "../appState";
+import { setLocale } from "../i18n";
 import {
   ExtensionDialogCard,
   extensionDialogCloseLabel,
@@ -14,6 +15,7 @@ import {
 } from "./ExtensionDialogCard";
 
 afterEach(() => {
+  setLocale("en");
   vi.useRealTimers();
   document.body.replaceChildren();
   localStorage.clear();
@@ -214,6 +216,37 @@ describe("extension-dialog-card closed outcome", () => {
 
     expect(root.querySelector(".header-status")?.textContent).toBe("Timed out");
     expect(root.querySelector(".closed-summary")?.textContent).toContain("timed out");
+  });
+});
+
+describe("extension-dialog-card zh-CN rendering", () => {
+  it("renders the dialog controls and outcome in Chinese after setLocale", async () => {
+    setLocale("zh-CN");
+
+    const card = await mountOpenDialog(openDialog({ message: "扩展想要写入文件。" }));
+    const root = renderRoot(card);
+    expect(buttonWithText(root, "是")).toBeDefined();
+    expect(buttonWithText(root, "否")).toBeDefined();
+    expect(buttonWithText(root, "取消")).toBeDefined();
+    expect(buttonsWithText(root, "Yes")).toHaveLength(0);
+
+    card.remove();
+    const closed = new ExtensionDialogCard();
+    closed.outcome = closedDialog("answered", true);
+    document.body.append(closed);
+    await closed.updateComplete;
+    const closedRoot = renderRoot(closed);
+    expect(closedRoot.querySelector(".header-status")?.textContent).toBe("已回答");
+    expect(closedRoot.querySelector(".closed-summary")?.textContent).toBe("已回答：是");
+    expect(buttonWithText(closedRoot, "忽略")).toBeDefined();
+  });
+
+  it("renders the Chinese countdown labels", () => {
+    setLocale("zh-CN");
+    const now = Date.parse("2026-07-27T10:00:00.000Z");
+    expect(extensionDialogCountdownText("2026-07-27T10:00:45.000Z", now)).toBe("45 秒后自动取消");
+    expect(extensionDialogCountdownText("2026-07-27T10:05:00.000Z", now)).toBe("5 分 0 秒后自动取消");
+    expect(extensionDialogCountdownText("2026-07-27T11:02:00.000Z", now)).toBe("1 小时 2 分后自动取消");
   });
 });
 

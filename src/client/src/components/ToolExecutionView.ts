@@ -4,6 +4,7 @@ import { parseReviewChangeRecord } from "../api/parsers";
 import { writeClipboardText } from "../clipboard";
 import { isSnapshotRolledBack, recordRolledBackSnapshot } from "../reviewState";
 import type { ReviewChangeRecord, ReviewDiffHunk, RollbackReviewChangeResult } from "../../../shared/apiTypes";
+import { I18nController, t } from "../i18n";
 import type { ToolExecutionPart } from "./shared";
 
 const MAX_COLLAPSED_DIFF_LINES = 180;
@@ -24,6 +25,7 @@ export class ToolExecutionView extends LitElement {
   @state() private localRolledBack = false;
   @state() private isRollingBack = false;
   @state() private rollbackError: string | undefined;
+  private readonly i18n = new I18nController(this);
 
   override render() {
     const execution = this.execution;
@@ -54,9 +56,9 @@ export class ToolExecutionView extends LitElement {
           </div>
         </div>
 
-        ${previewMismatch ? html`<p class="notice">Applied diff differs from the preview.</p>` : null}
+        ${previewMismatch ? html`<p class="notice">${t("chat.previewMismatch")}</p>` : null}
         ${errorText === undefined || errorText === "" ? null : html`<pre class="error-text">${errorText}</pre>`}
-        ${visibleDiff === undefined ? this.renderTextBody(bodyText, execution.status === "error", target) : this.renderDiffBody(visibleDiff, actualDiff === undefined ? "Preview diff" : "Applied diff", target)}
+        ${visibleDiff === undefined ? this.renderTextBody(bodyText, execution.status === "error", target) : this.renderDiffBody(visibleDiff, actualDiff === undefined ? t("chat.previewDiff") : t("chat.appliedDiff"), target)}
         ${this.renderReviewCard(execution)}
       </section>
     `;
@@ -82,11 +84,11 @@ export class ToolExecutionView extends LitElement {
     if ((text === undefined || text === "") && target === undefined) return null;
     return html`
       <details class="text-body" ?open=${open}>
-        <summary>Details</summary>
+        <summary>${t("common.details")}</summary>
         ${this.renderExpandedTarget(target)}
         ${text === undefined || text === "" ? null : html`
           <div class="detail-result">
-            <span class="detail-label">Result</span>
+            <span class="detail-label">${t("common.result")}</span>
             <pre>${text}</pre>
           </div>
         `}
@@ -106,13 +108,13 @@ export class ToolExecutionView extends LitElement {
         </summary>
         ${this.renderExpandedTarget(target)}
         <div class="diff-toolbar">
-          <span>${truncated ? `Showing ${String(visibleLines.length)} of ${String(lines.length)} lines` : "Full diff"}</span>
-          <button type="button" @click=${() => { void this.copyDiff(diff); }}>${this.copied ? "Copied" : "Copy diff"}</button>
+          <span>${truncated ? t("chat.showingDiffLines", { visible: visibleLines.length, total: lines.length }) : t("chat.fullDiff")}</span>
+          <button type="button" @click=${() => { void this.copyDiff(diff); }}>${this.copied ? t("chat.copied") : t("chat.copyDiff")}</button>
         </div>
         <pre class="diff" aria-label=${label}><code class="diff-content">${visibleLines.map((line) => html`<span class=${diffLineClass(line)}>${line}</span>`)}</code></pre>
         ${truncated ? html`
           <button class="show-more" type="button" @click=${() => { this.showFullDiff = true; }}>
-            Show all ${String(lines.length)} diff lines
+            ${t("chat.showAllDiffLines", { total: lines.length })}
           </button>
         ` : null}
       </details>
@@ -147,7 +149,7 @@ export class ToolExecutionView extends LitElement {
       <div class="review-card" data-snapshot-id=${review.snapshotId}>
         <div class="review-header">
           <div class="review-title">
-            <span class="review-badge">Review</span>
+            <span class="review-badge">${t("chat.review")}</span>
             <span class="review-path" title=${review.path} aria-label=${`File: ${review.path}`}>${review.path}</span>
             <span class=${`review-status-badge ${review.status}`}>${review.status}</span>
           </div>
@@ -167,7 +169,7 @@ export class ToolExecutionView extends LitElement {
         ${review.hunks !== undefined && review.hunks.length > 0 ? html`
           <details class="review-hunks-details">
             <summary>
-              <span>Changes</span>
+              <span>${t("chat.changes")}</span>
               <small>${String(totalDiffLines)} ${totalDiffLines === 1 ? "line" : "lines"}${hunkCount > 1 ? ` (${String(hunkCount)} hunks)` : ""}</small>
             </summary>
             <div class="review-hunk-lines">
@@ -181,15 +183,15 @@ export class ToolExecutionView extends LitElement {
 
   private renderRollbackButton(review: ReviewChangeRecord, isRolledBack: boolean) {
     if (isRolledBack) {
-      return html`<button type="button" class="rollback-button" disabled>Rolled back</button>`;
+      return html`<button type="button" class="rollback-button" disabled>${t("chat.rolledBack")}</button>`;
     }
     if (this.isRollingBack) {
-      return html`<button type="button" class="rollback-button" disabled>Rolling back...</button>`;
+      return html`<button type="button" class="rollback-button" disabled>${t("chat.rollingBack")}</button>`;
     }
     if (!review.reversible) {
-      return html`<button type="button" class="rollback-button" disabled title="Rollback unavailable">Rollback</button>`;
+      return html`<button type="button" class="rollback-button" disabled title=${t("chat.rollbackUnavailable")}>${t("chat.rollback")}</button>`;
     }
-    return html`<button type="button" class="rollback-button" @click=${() => { void this.handleRollback(review); }}>Rollback</button>`;
+    return html`<button type="button" class="rollback-button" @click=${() => { void this.handleRollback(review); }}>${t("chat.rollback")}</button>`;
   }
 
   private renderHunk(hunk: ReviewDiffHunk) {

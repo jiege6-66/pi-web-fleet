@@ -5,6 +5,7 @@ import type { MachineStatusSnapshot } from "../../../shared/machineStatus";
 import { actionMenuPanelStyle } from "./actionMenu";
 import { hasStatusUnread, renderActionActivityIndicator, statusActivityKind } from "./activityBadge";
 import type { KeyboardNavigableSection } from "./navigationFocus";
+import { I18nController, t } from "../i18n";
 import { activateSelectableRow, focusSelectedOrFirstSelectableRow, handleSelectableRowKeyboard } from "./selectableRow";
 import { listStyles } from "./shared";
 
@@ -24,6 +25,7 @@ export class MachineList extends LitElement implements KeyboardNavigableSection 
   @property({ attribute: false }) onCancelKeyboardNavigation?: () => void | Promise<void>;
   @state() private openMenuMachineId: string | undefined;
   @state() private menuStyle = "";
+  private readonly i18n = new I18nController(this);
 
   private readonly onDocumentClick = (event: MouseEvent) => {
     if (event.composedPath().includes(this)) return;
@@ -109,7 +111,7 @@ export class MachineList extends LitElement implements KeyboardNavigableSection 
         >⋯</button>
         ${open ? html`
           <div class="action-menu-panel machine-menu-panel" id=${menuId} style=${this.menuStyle} @click=${(event: MouseEvent) => { event.stopPropagation(); }}>
-            <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>Remove</button>
+            <button class="danger" title=${`Remove ${machine.name}`} @click=${() => { this.removeMachine(machine); }}>${t("common.remove")}</button>
           </div>
         ` : null}
       </div>
@@ -117,10 +119,10 @@ export class MachineList extends LitElement implements KeyboardNavigableSection 
   }
 
   private renderHeading() {
-    if (!this.collapsible) return html`<span>Machines</span>`;
-    const selectedSummary = this.selected?.name ?? "No machine selected";
+    if (!this.collapsible) return html`<span>${t("nav.machines")}</span>`;
+    const selectedSummary = this.selected?.name ?? t("nav.noMachineSelected");
     const selectedTitle = this.selected?.baseUrl ?? selectedSummary;
-    return html`<button class="section-toggle" aria-expanded=${String(!this.collapsed)} @click=${() => { this.onToggleCollapsed?.(); }}><span class="section-title"><span class="section-name">${this.collapsed ? "▸" : "▾"} Machines</span>${this.collapsed ? html`<small class="section-selected" title=${selectedTitle}>${selectedSummary}</small>` : null}</span><small class="section-count">${this.machines.length}</small></button>`;
+    return html`<button class="section-toggle" aria-expanded=${String(!this.collapsed)} @click=${() => { this.onToggleCollapsed?.(); }}><span class="section-title"><span class="section-name">${this.collapsed ? "▸" : "▾"} ${t("nav.machines")}</span>${this.collapsed ? html`<small class="section-selected" title=${selectedTitle}>${selectedSummary}</small>` : null}</span><small class="section-count">${this.machines.length}</small></button>`;
   }
 
   private toggleMenu(machineId: string, target: EventTarget | null): void {

@@ -7,6 +7,7 @@ import { selectedMachineId } from "../../controllers/types";
 import type { NavigationSection } from "../../appShell/navigationState";
 import { NAVIGATION_SECTION_ORDER } from "../../appShell/navigationState";
 import type { KeyboardNavigableSection } from "../navigationFocus";
+import { I18nController, setLocale, t } from "../../i18n";
 import "../MachineList";
 import "../MachineSwitcher";
 import "../ProjectList";
@@ -78,6 +79,7 @@ export class AppNavigationPanel extends LitElement {
   @query("project-list") private projectList?: KeyboardNavigableSection;
   @query("workspace-list") private workspaceList?: KeyboardNavigableSection;
   @query("session-list") private sessionList?: KeyboardNavigableSection;
+  private readonly i18n = new I18nController(this);
 
   async focusSection(section: NavigationSection): Promise<boolean> {
     await this.updateComplete;
@@ -106,7 +108,17 @@ export class AppNavigationPanel extends LitElement {
         ></machine-switcher>
         <div class="header-actions">
           ${this.refreshControl}
-          <button title="Show Actions" aria-label="Show Actions" @click=${() => { this.onShowActions?.(); }}>Actions</button>
+          <select
+            class="lang-select"
+            title=${t("common.language")}
+            aria-label=${t("common.language")}
+            .value=${this.i18n.locale}
+            @change=${this.handleLanguageChange}
+          >
+            <option value="en" ?selected=${this.i18n.locale === "en"}>English</option>
+            <option value="zh-CN" ?selected=${this.i18n.locale === "zh-CN"}>中文</option>
+          </select>
+          <button title=${t("nav.showActions")} aria-label=${t("nav.showActions")} @click=${() => { this.onShowActions?.(); }}>${t("nav.actions")}</button>
         </div>
       </header>
       ${this.compact && shouldShowMachinesSection(this.machines) ? html`
@@ -216,6 +228,14 @@ export class AppNavigationPanel extends LitElement {
     void this.onCancelKeyboardNavigation?.();
   }
 
+  private readonly handleLanguageChange = (event: Event): void => {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    const value = event.target.value;
+    if (value === "en" || value === "zh-CN") {
+      setLocale(value);
+    }
+  };
+
   static override styles = css`
     :host { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     :host([compact]) { flex: 1 1 auto; }
@@ -232,7 +252,8 @@ export class AppNavigationPanel extends LitElement {
     project-list[collapsed],
     workspace-list[collapsed],
     session-list[collapsed] { flex: 0 0 auto; min-height: auto; overflow: hidden; }
-    button { border: 1px solid var(--pi-border); border-radius: 8px; background: var(--pi-surface); color: var(--pi-text); padding: 7px 9px; cursor: pointer; }
+    button, select.lang-select { border: 1px solid var(--pi-border); border-radius: 8px; background: var(--pi-surface); color: var(--pi-text); padding: 7px 9px; cursor: pointer; font-size: inherit; font-family: inherit; }
+    select.lang-select:hover { background: var(--pi-surface-hover); }
   `;
 }
 

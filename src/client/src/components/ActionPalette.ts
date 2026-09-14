@@ -5,6 +5,7 @@ import { formatShortcut } from "../keyboardShortcuts";
 import { keyboardEventOriginatesFromNativeActivationControl } from "./keyboardEventTarget";
 import "./ModalSurface";
 import { scrollWhenSelected } from "./scrollWhenSelected";
+import { I18nController, t } from "../i18n";
 
 @customElement("action-palette")
 export class ActionPalette extends LitElement {
@@ -13,6 +14,7 @@ export class ActionPalette extends LitElement {
   @property({ attribute: false }) onCancel?: () => void;
   @state() private queryText = "";
   @state() private selectedIndex = 0;
+  private readonly i18n = new I18nController(this);
 
   override render() {
     const actions = this.filteredActions();
@@ -20,13 +22,13 @@ export class ActionPalette extends LitElement {
       <modal-surface
         .onClose=${() => this.onCancel?.()}
         .initialFocus=${"input"}
-        .label=${"Action palette"}
+        .label=${t("common.actionPalette")}
         @keydown=${(event: KeyboardEvent) => { this.handleKeyDown(event); }}
       >
         <header>
           <input
             .value=${this.queryText}
-            placeholder="Search actions..."
+            placeholder=${t("common.searchActions")}
             @input=${(event: Event) => {
               if (event.target instanceof HTMLInputElement) {
                 this.queryText = event.target.value;
@@ -34,10 +36,10 @@ export class ActionPalette extends LitElement {
               }
             }}
           >
-          <button title="Close" aria-label="Close" @click=${() => this.onCancel?.()}>×</button>
+          <button title=${t("common.close")} aria-label=${t("common.close")} @click=${() => this.onCancel?.()}>×</button>
         </header>
         <div class="options">
-          ${actions.length === 0 ? html`<div class="empty">No actions found.</div>` : actions.map((action, index) => html`
+          ${actions.length === 0 ? html`<div class="empty">${t("common.noActionsFound")}</div>` : actions.map((action, index) => html`
             <button
               class=${`${index === this.selectedIndex ? "selected" : ""} ${action.enabled === false ? "disabled" : ""}`}
               ?disabled=${action.enabled === false}

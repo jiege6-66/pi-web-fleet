@@ -15,6 +15,7 @@ import { mergeSelectedMachineAccessConfig } from "./settings/settingsMachineAcce
 import { friendlySelectedMachineSettingsErrorMessage, isSelectedMachineSettingsUnsupported, pluginLifecycleSupport, selectedMachineSettingsSupportKey, settingsMachineTarget, settingsMachineTargetLabel, type PluginLifecycleSupport, type SettingsMachineTarget } from "./settings/settingsMachineTarget";
 import { mergeSelectedMachinePluginConfig, pluginEnabledConfigPatch } from "./settings/settingsPluginConfig";
 import { mergeSelectedMachineSessiondConfig } from "./settings/settingsSessiondConfig";
+import { I18nController, t } from "../i18n";
 
 @customElement("settings-dialog")
 export class SettingsDialog extends LitElement {
@@ -28,6 +29,7 @@ export class SettingsDialog extends LitElement {
   @property({ attribute: false }) onRefreshMachineRuntime?: (machineId: string) => void | Promise<void>;
   @state() private configResponse: PiWebConfigResponse | undefined;
   @state() private accessConfigResponse: PiWebConfigResponse | undefined;
+  private readonly i18n = new I18nController(this);
   @state() private sessiondConfigResponse: PiWebConfigResponse | undefined;
   @state() private pluginsResponse: PiWebPluginsResponse | undefined;
   @state() private selectedPluginConfigResponse: PiWebConfigResponse | undefined;
@@ -95,21 +97,21 @@ export class SettingsDialog extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <modal-surface .onClose=${() => this.onClose?.()} .label=${"PI WEB settings"}>
+      <modal-surface .onClose=${() => this.onClose?.()} .label=${t("settings.title")}>
         <header class="settings-header">
           <div>
-            <span class="eyebrow">Settings</span>
+            <span class="eyebrow">${t("common.settings")}</span>
             <h1>PI WEB</h1>
           </div>
-          <button class="close-button" title="Close settings" aria-label="Close settings" @click=${() => this.onClose?.()}>×</button>
+          <button class="close-button" title=${t("settings.closeSettings")} aria-label=${t("settings.closeSettings")} @click=${() => this.onClose?.()}>×</button>
         </header>
         <div class="settings-body">
           <nav class="settings-nav" aria-label="Settings sections">
-            ${this.renderNavButton("general", "General", "Gateway + selected machine")}
-            ${this.renderNavButton("sessiond", "Session daemon", "Selected machine")}
-            ${this.renderNavButton("packages", "Pi packages", "Selected machine")}
-            ${this.renderNavButton("plugins", "PI WEB plugins", "Selected machine")}
-            ${this.renderNavButton("shortcuts", "Keyboard", "Gateway shortcuts")}
+            ${this.renderNavButton("general", t("settings.general"), t("settings.gatewaySelectedMachine"))}
+            ${this.renderNavButton("sessiond", t("settings.sessiond"), t("settings.selectedMachine"))}
+            ${this.renderNavButton("packages", t("settings.packages"), t("settings.selectedMachine"))}
+            ${this.renderNavButton("plugins", t("settings.plugins"), t("settings.selectedMachine"))}
+            ${this.renderNavButton("shortcuts", t("settings.shortcuts"), t("settings.gatewayShortcuts"))}
           </nav>
           <main class="settings-content">
             ${this.renderActiveSection()}
