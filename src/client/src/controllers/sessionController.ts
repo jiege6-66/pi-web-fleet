@@ -23,6 +23,11 @@ import { TrailingRefreshCoordinator } from "./trailingRefreshCoordinator";
 const MESSAGE_PAGE_SIZE = 100;
 const PENDING_SESSION_START_SCOPE = ["machine", "project", "workspace", "session"] as const;
 const SESSION_RESTORE_SCOPE = ["machine", "project", "workspace", "session"] as const;
+// A closed extension dialog's outcome card is a transient receipt: it stays long
+// enough to register what the user answered, then fades out on its own. Without
+// this the card would sit at the bottom of the transcript forever (dismissable
+// only by hand), reading as if the dialog were still waiting for attention.
+const CLOSED_DIALOG_AUTO_DISMISS_MS = 8_000;
 
 export interface SessionEventSocket {
   connect(
@@ -159,6 +164,9 @@ export class SessionController {
   private readonly pendingSessionStarts = new Map<string, PendingSessionStart>();
   private readonly suppressedCreatedSessions = new Map<string, SuppressedCreatedSession>();
   private readonly selectedSessionRefreshes = new TrailingRefreshCoordinator<string>();
+  // Auto-dismiss timers for transient closed-dialog outcome cards, keyed by
+  // dialog id. Cleared whenever the cards they belong to leave the screen.
+  private readonly closedDialogTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     private readonly getState: GetState,
@@ -193,6 +201,7 @@ export class SessionController {
     this.disposed = true;
     this.selectionSeq += 1;
     this.socket.close();
+    this.clearClosedDialogTimers();
     this.clearPendingUpdates();
   }
 
@@ -201,6 +210,7 @@ export class SessionController {
     this.socket.close();
     this.notifications?.clearSelectedSession();
     this.streamWatermark = undefined;
+    this.clearClosedDialogTimers();
     this.clearPendingUpdates();
     // Note: sendingPrompts is intentionally NOT cleared here. Deselecting a
     // session must not cancel the in-flight upload indicator of the session
@@ -286,6 +296,7 @@ export class SessionController {
     const seq = ++this.selectionSeq;
     this.socket.close();
     this.streamWatermark = undefined;
+    this.clearClosedDialogTimers();
     this.clearPendingUpdates();
     this.notifications?.prepareSelectedSession(session, machineId);
     const transcriptKey = this.sessionCacheKey(session.id);
@@ -1914,11 +1925,35 @@ export class SessionController {
       pendingDialogs: state.pendingDialogs.filter((pending) => pending.dialogId !== closed.dialog.dialogId),
       closedDialogs: [...state.closedDialogs, closed],
     });
+    this.scheduleClosedDialogAutoDismiss(closed.dialog.dialogId);
+  }
+
+  // The closed card is a receipt, not a standing request: it auto-dismisses so
+  // it cannot pile up at the bottom of the transcript while the conversation
+  // continues above it. Dismissing by hand still works and clears the timer.
+  private scheduleClosedDialogAutoDismiss(dialogId: string): void {
+    const existing = this.closedDialogTimers.get(dialogId);
+    if (existing !== undefined) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.closedDialogTimers.delete(dialogId);
+      this.dismissClosedDialog(dialogId);
+    }, CLOSED_DIALOG_AUTO_DISMISS_MS);
+    this.closedDialogTimers.set(dialogId, timer);
+  }
+
+  private clearClosedDialogTimers(): void {
+    for (const timer of this.closedDialogTimers.values()) clearTimeout(timer);
+    this.closedDialogTimers.clear();
   }
 
   /** Drop a closed dialog's transient outcome card (e.g. the user dismissed it). */
   dismissClosedDialog(dialogId: string): void {
     const state = this.getState();
+    const timer = this.closedDialogTimers.get(dialogId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.closedDialogTimers.delete(dialogId);
+    }
     if (!state.closedDialogs.some((entry) => entry.dialog.dialogId === dialogId)) return;
     this.setState({ closedDialogs: state.closedDialogs.filter((entry) => entry.dialog.dialogId !== dialogId) });
   }

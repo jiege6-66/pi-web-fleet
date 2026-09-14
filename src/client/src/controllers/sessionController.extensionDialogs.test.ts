@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { initialAppState } from "../appState";
 import type { ExtensionDialogCloseResponse, ExtensionDialogKind, PendingExtensionDialog } from "../api";
 import { SessionController } from "./sessionController";
@@ -168,6 +168,54 @@ describe("SessionController extension dialog state", () => {
     harness.controller.dismissClosedDialog("dialog-1");
 
     expect(harness.state().closedDialogs).toEqual([]);
+  });
+
+  it("auto-dismisses the closed outcome card after the receipt window", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = await liveSession();
+      harness.socket.emit({ type: "dialog.opened", dialog: dialog("dialog-1") });
+      harness.socket.emit({ type: "dialog.closed", dialogId: "dialog-1", reason: "answered", answer: true });
+      expect(harness.state().closedDialogs).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      expect(harness.state().closedDialogs).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a closed card that was dismissed by hand dropped when its timer would have fired", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = await liveSession();
+      harness.socket.emit({ type: "dialog.opened", dialog: dialog("dialog-1") });
+      harness.socket.emit({ type: "dialog.closed", dialogId: "dialog-1", reason: "cancelled" });
+
+      harness.controller.dismissClosedDialog("dialog-1");
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      expect(harness.state().closedDialogs).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forgets auto-dismiss timers when the session is deselected", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = await liveSession();
+      harness.socket.emit({ type: "dialog.opened", dialog: dialog("dialog-1") });
+      harness.socket.emit({ type: "dialog.closed", dialogId: "dialog-1", reason: "answered", answer: true });
+
+      harness.controller.deselectSession({ updateUrl: false });
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      expect(harness.state().closedDialogs).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
