@@ -5,7 +5,7 @@ import { styleMap, type StyleInfo } from "lit/directives/style-map.js";
 import { Terminal, type ITerminalOptions, type ITheme } from "@xterm/xterm";
 import { FitAddon, type ITerminalDimensions } from "@xterm/addon-fit";
 import xtermStyles from "@xterm/xterm/css/xterm.css?inline";
-import type { PairedWorkspaceBackendChannel, PairedWorkspaceBackendChannelClose, TerminalCommandRun, WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
+import type { PairedWorkspaceBackendChannel, PairedWorkspaceBackendChannelClose, PluginI18n, TerminalCommandRun, WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
 import { writeClipboardText } from "./clipboard";
 import { selectFallbackTerminal, selectPreferredTerminal } from "./terminalSelection";
 import { TerminalBackendClient, terminalChannelFailureMessage, terminalInputFrames, type TerminalClientFrame, type TerminalInfo, type TerminalServerFrame, type TerminalSize } from "./terminalProtocol";
@@ -13,6 +13,7 @@ import { createTerminalCopySnapshot, DEFAULT_TERMINAL_ANSI_THEME, type TerminalC
 import { createTerminalSoftKeysDefaultEnvironmentMedia, hasTerminalSoftKeysPreference, initialTerminalSoftKeysEnabled, isTerminalSoftKeysDefaultEnvironment, writeTerminalSoftKeysPreference } from "./terminalSoftKeysPreference";
 import type { TerminalBrowserRuntime } from "./TerminalBrowserRuntime";
 import type { TerminalSoftKeyInputOptions } from "./TerminalSoftKeys";
+import { tr } from "./i18n";
 
 const TERMINAL_OPTIONS_BASE: ITerminalOptions = {
   cursorBlink: true,
@@ -61,6 +62,10 @@ export class TerminalPanel extends LitElement {
   @state() private softKeysEnabled = initialTerminalSoftKeysEnabled();
   @state() private copySnapshot: TerminalCopySnapshot | undefined;
   @state() private copyStatus: string | undefined;
+
+  private text(key: string, fallback: string, params?: Readonly<Record<string, string | number>>): string {
+    return tr(this.context?.i18n, `plugins.terminal.${key}`, fallback, params);
+  }
 
   private terminal: Terminal | undefined;
   private fitAddon: FitAddon | undefined;
@@ -824,10 +829,10 @@ export class TerminalPanel extends LitElement {
         <section class="command-run-notice running">
           <div>
             <strong>${run.title}</strong>
-            <p>Command is running. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> or use the button to cancel.</p>
+            <p>${this.text("commandRunning", "Command is running. Press {shortcut} or use the button to cancel.", { shortcut: "Ctrl+C" })}</p>
             <code>${run.command}</code>
           </div>
-          <button class="danger" ?disabled=${cancelling} @click=${() => { void this.cancelCommandRun(run); }}>${cancelling ? "Cancel sent…" : "Cancel command"}</button>
+          <button class="danger" ?disabled=${cancelling} @click=${() => { void this.cancelCommandRun(run); }}>${cancelling ? this.text("cancelSent", "Cancel sent…") : this.text("cancelCommand", "Cancel command")}</button>
         </section>
       `;
     }
@@ -836,11 +841,11 @@ export class TerminalPanel extends LitElement {
       return html`
         <section class=${`command-run-notice ${run.status}`}>
           <div>
-            <strong>${commandRunCompletionLabel(run)}</strong>
-            <p>Output is preserved. Continue in a shell to inspect or run follow-up commands.</p>
+            <strong>${commandRunCompletionLabel(run, this.context?.i18n)}</strong>
+            <p>${this.text("commandPreserved", "Output is preserved. Continue in a shell to inspect or run follow-up commands.")}</p>
             <code>${run.command}</code>
           </div>
-          <button ?disabled=${continuing} @click=${() => { void this.continueTerminal(terminal.id); }}>${continuing ? "Starting shell…" : "Continue in shell"}</button>
+          <button ?disabled=${continuing} @click=${() => { void this.continueTerminal(terminal.id); }}>${continuing ? this.text("startingShell", "Starting shell…") : this.text("continueInShell", "Continue in shell")}</button>
         </section>
       `;
     }
@@ -903,10 +908,10 @@ export class TerminalPanel extends LitElement {
   private async copyAllSnapshotText(): Promise<void> {
     const text = this.copySnapshot?.text ?? "";
     if (text === "") {
-      this.copyStatus = "No terminal output to copy.";
+      this.copyStatus = this.text("copyMode.noOutput", "No terminal output to copy.");
       return;
     }
-    this.copyStatus = await writeClipboardText(text) ? "Copied all terminal output." : "Unable to copy terminal output.";
+    this.copyStatus = await writeClipboardText(text) ? this.text("copyMode.copiedAll", "Copied all terminal output.") : this.text("copyMode.unableToCopy", "Unable to copy terminal output.");
   }
 
   private renderCopyModeToggle() {
@@ -916,12 +921,12 @@ export class TerminalPanel extends LitElement {
       <button
         type="button"
         class=${active ? "copy-mode-toggle selected" : "copy-mode-toggle"}
-        title=${active ? "Return to the interactive terminal" : "Select and copy terminal output"}
-        aria-label=${active ? "Close terminal copy mode" : "Open terminal copy mode"}
+        title=${active ? this.text("copyMode.exitTitle", "Return to the interactive terminal") : this.text("copyMode.enterTitle", "Select and copy terminal output")}
+        aria-label=${active ? this.text("copyMode.closeAria", "Close terminal copy mode") : this.text("copyMode.openAria", "Open terminal copy mode")}
         aria-pressed=${String(active)}
         @click=${() => { if (active) this.exitCopyMode(); else this.enterCopyMode(); }}
       >
-        <span>${active ? "Done" : "Select"}</span>
+        <span>${active ? this.text("copyMode.done", "Done") : this.text("copyMode.select", "Select")}</span>
       </button>
     `;
   }
@@ -929,12 +934,15 @@ export class TerminalPanel extends LitElement {
   private renderCopyModeToolbar() {
     const snapshot = this.copySnapshot;
     if (snapshot === undefined) return null;
+    const rowCountText = snapshot.physicalLineCount === 1
+      ? this.text("copyMode.rowCountOne", "{count} row", { count: snapshot.physicalLineCount })
+      : this.text("copyMode.rowCountMany", "{count} rows", { count: snapshot.physicalLineCount });
     return html`
-      <div class="terminal-copy-toolbar" role="toolbar" aria-label="Terminal copy controls">
-        <span aria-live="polite">${this.copyStatus ?? "Snapshot · long-press and select text"}</span>
-        <small>${snapshot.physicalLineCount} ${snapshot.physicalLineCount === 1 ? "row" : "rows"}</small>
-        <button type="button" @click=${() => { this.refreshCopyMode(); }}>Refresh</button>
-        <button type="button" @click=${() => { void this.copyAllSnapshotText(); }}>Copy all</button>
+      <div class="terminal-copy-toolbar" role="toolbar" aria-label=${this.text("copyMode.toolbarAria", "Terminal copy controls")}>
+        <span aria-live="polite">${this.copyStatus ?? this.text("copyMode.hint", "Snapshot · long-press and select text")}</span>
+        <small>${rowCountText}</small>
+        <button type="button" @click=${() => { this.refreshCopyMode(); }}>${this.text("copyMode.refresh", "Refresh")}</button>
+        <button type="button" @click=${() => { void this.copyAllSnapshotText(); }}>${this.text("copyMode.copyAll", "Copy all")}</button>
       </div>
     `;
   }
@@ -943,7 +951,7 @@ export class TerminalPanel extends LitElement {
     const snapshot = this.copySnapshot;
     if (snapshot === undefined) return null;
     return html`
-      <section class="terminal-copy-view" aria-label="Terminal copy mode">
+      <section class="terminal-copy-view" aria-label=${this.text("copyMode.viewAria", "Terminal copy mode")}>
         ${this.copyToolbarReplacesSoftKeys() ? null : this.renderCopyModeToolbar()}
         <div class="terminal-copy-layers">
           <pre class="terminal-copy-content" aria-hidden="true">${snapshot.lines.map((line, index) => html`${index === 0 ? null : "\n"}${line.runs.map((run) => html`<span style=${styleMap(terminalCopyRunStyle(run.style))}>${run.text}</span>`)}`)}</pre>
@@ -955,7 +963,7 @@ export class TerminalPanel extends LitElement {
             spellcheck="false"
             autocapitalize="off"
             autocomplete="off"
-            aria-label="Selectable terminal output"
+            aria-label=${this.text("copyMode.selectorAria", "Selectable terminal output")}
             .value=${snapshot.text}
             @scroll=${() => { this.syncCopySnapshotScroll(); }}
           ></textarea>
@@ -1000,8 +1008,8 @@ export class TerminalPanel extends LitElement {
       <button
         type="button"
         class=${this.softKeysEnabled ? "soft-keys-toggle selected" : "soft-keys-toggle"}
-        title=${this.softKeysEnabled ? "Hide terminal soft keys" : "Show terminal soft keys"}
-        aria-label=${this.softKeysEnabled ? "Hide terminal soft keys" : "Show terminal soft keys"}
+        title=${this.softKeysEnabled ? this.text("softKeys.hide", "Hide terminal soft keys") : this.text("softKeys.show", "Show terminal soft keys")}
+        aria-label=${this.softKeysEnabled ? this.text("softKeys.hide", "Hide terminal soft keys") : this.text("softKeys.show", "Show terminal soft keys")}
         aria-pressed=${String(this.softKeysEnabled)}
         @click=${() => { this.toggleSoftKeys(); }}
       >
@@ -1009,7 +1017,7 @@ export class TerminalPanel extends LitElement {
           <rect x="3" y="5" width="18" height="14" rx="2"></rect>
           <path d="M7 9h.01M10 9h.01M13 9h.01M16 9h.01M7 12h.01M10 12h.01M13 12h.01M16 12h.01M8 16h8"></path>
         </svg>
-        <span>Keys</span>
+        <span>${this.text("softKeys.toggle", "Keys")}</span>
       </button>
     `;
   }
@@ -1019,6 +1027,7 @@ export class TerminalPanel extends LitElement {
     return staticHtml`
       <${softKeysTag}
         class="terminal-soft-keys"
+        .i18n=${this.context?.i18n}
         .modes=${this.terminal?.modes}
         .refocusOnClick=${!this.defaultSoftKeysEnvironment}
         .onInput=${(data: string, options: TerminalSoftKeyInputOptions) => { this.sendSoftKeyInput(data, options); }}
@@ -1034,17 +1043,17 @@ export class TerminalPanel extends LitElement {
           ${this.renderSoftKeysToggle()}
           ${this.terminals.map((terminal) => html`
             <button class=${this.selectedId === terminal.id ? "selected" : ""} @click=${() => { this.selectTerminal(terminal.id); }}>
-              <span>${terminal.name}${terminal.exited ? " · exited" : ""}</span>
-              <small @click=${(event: Event) => { void this.closeTerminal(terminal.id, event); }}>×</small>
+              <span>${terminal.name}${terminal.exited ? this.text("exited", " · exited") : ""}</span>
+              <small title=${this.text("close", "Close terminal")} aria-label=${this.text("close", "Close terminal")} @click=${(event: Event) => { void this.closeTerminal(terminal.id, event); }}>×</small>
             </button>
           `)}
-          <button class="new" ?disabled=${this.context === undefined} @click=${() => { void this.startTerminal(); }}>+ Shell</button>
+          <button class="new" ?disabled=${this.context === undefined} @click=${() => { void this.startTerminal(); }}>${this.text("newShell", "+ Shell")}</button>
         </div>
         ${this.error === undefined ? null : html`<p class="error">${this.error}</p>`}
         ${this.connectionError === undefined ? null : html`<p class="error">${this.connectionError}</p>`}
         ${this.renderCommandRunNotice()}
         ${this.renderTerminalAccessoryBar()}
-        ${this.loading ? html`<p class="muted">Loading terminals…</p>` : null}
+        ${this.loading ? html`<p class="muted">${this.text("loading", "Loading terminals…")}</p>` : null}
         <div class="terminal-stage">
           <div class=${this.copySnapshot === undefined ? "terminal-host" : "terminal-host copying"} ?inert=${this.copySnapshot !== undefined}></div>
           ${this.renderCopyMode()}
@@ -1148,9 +1157,15 @@ function isCommandRunPending(run: TerminalCommandRun): boolean {
   return run.status === "queued" || run.status === "running";
 }
 
-function commandRunCompletionLabel(run: TerminalCommandRun): string {
-  if (run.status === "succeeded") return `Command succeeded${run.exitCode === undefined ? "" : ` with exit code ${String(run.exitCode)}`}`;
-  return `Command failed${run.exitCode === undefined ? "" : ` with exit code ${String(run.exitCode)}`}`;
+function commandRunCompletionLabel(run: TerminalCommandRun, i18n?: PluginI18n): string {
+  if (run.status === "succeeded") {
+    return run.exitCode === undefined
+      ? tr(i18n, "plugins.terminal.commandSucceeded", "Command succeeded")
+      : tr(i18n, "plugins.terminal.commandSucceededWithCode", "Command succeeded with exit code {code}", { code: run.exitCode });
+  }
+  return run.exitCode === undefined
+    ? tr(i18n, "plugins.terminal.commandFailed", "Command failed")
+    : tr(i18n, "plugins.terminal.commandFailedWithCode", "Command failed with exit code {code}", { code: run.exitCode });
 }
 
 export function filterTerminalInput(data: string): string {

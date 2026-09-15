@@ -63,6 +63,10 @@ export const filesPluginMessages: PluginLocaleFragment = {
     "plugins.files.viewerTooLarge": "File too large to preview:",
     "plugins.files.viewerLimit": "limit",
     "plugins.files.viewerUseDownload": "Use Download above.",
+    "plugins.files.uploadProgressAria": "Workspace uploads",
+    "plugins.files.reviewDialogAria": "Review file upload",
+    "plugins.files.reviewFilesAria": "Files to upload",
+    "plugins.files.viewerPdfNote": "Inline PDF support varies by browser. Use Open ↗ or Download above if the document does not appear.",
   },
   "zh-CN": {
     "plugins.files.panelTitle": "文件",
@@ -125,5 +129,9 @@ export const filesPluginMessages: PluginLocaleFragment = {
     "plugins.files.viewerTooLarge": "文件过大，无法预览：",
     "plugins.files.viewerLimit": "上限",
     "plugins.files.viewerUseDownload": "请使用上方下载。",
+    "plugins.files.uploadProgressAria": "工作区上传",
+    "plugins.files.reviewDialogAria": "审查文件上传",
+    "plugins.files.reviewFilesAria": "待上传文件",
+    "plugins.files.viewerPdfNote": "浏览器对行内 PDF 的支持各异。若文档未显示，请使用上方的“打开 ↗”或“下载”。",
   },
 };

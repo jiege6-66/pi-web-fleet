@@ -1,4 +1,5 @@
-import type { PiWebDockerMode, PiWebInstallationInfo, PiWebStatusMessage, PiWebStatusResponse, PluginRuntimeState } from "@jmfederico/pi-web/plugin-api";
+import type { PiWebDockerMode, PiWebInstallationInfo, PiWebStatusMessage, PiWebStatusResponse, PluginI18n, PluginRuntimeState } from "@jmfederico/pi-web/plugin-api";
+import { tr } from "./i18n.js";
 
 export interface CommandEntry {
   label: string;
@@ -12,29 +13,30 @@ export interface UpdatesRuntimeHint {
 // The single command users should run when they do not want to think: if an
 // update is available, `commands.update` already chains the update and a full
 // restart; otherwise, when anything is stale, a full restart is enough.
-export function recommendedCommand(status: PiWebStatusResponse): CommandEntry | undefined {
+export function recommendedCommand(status: PiWebStatusResponse, i18n?: PluginI18n): CommandEntry | undefined {
   const { commands, release, components } = status;
   if (release.updateAvailable && typeof commands.update === "string" && commands.update !== "") {
-    return { label: "Update & restart everything", command: commands.update };
+    return { label: tr(i18n, "plugins.updates.command.updateAndRestart", "Update & restart everything"), command: commands.update };
   }
   const restartNeeded = components.web.stale || components.sessiond.stale || !components.sessiond.available;
   if (restartNeeded && typeof commands.restart === "string" && commands.restart !== "") {
-    return { label: "Restart everything", command: commands.restart };
+    return { label: tr(i18n, "plugins.updates.command.restartEverything", "Restart everything"), command: commands.restart };
   }
   return undefined;
 }
 
-export function additionalCommands(status: PiWebStatusResponse, recommended: CommandEntry | undefined): CommandEntry[] {
-  return [
-    ["Update", status.commands.update],
-    ["Restart all", status.commands.restart],
-    ["Restart Web/UI", status.commands.restartWeb],
-    ["Restart session daemon", status.commands.restartSessiond],
-    ["Status", status.commands.status],
-  ]
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "")
-    .filter(([, command]) => command !== recommended?.command)
-    .map(([label, command]) => ({ label, command }));
+export function additionalCommands(status: PiWebStatusResponse, recommended: CommandEntry | undefined, i18n?: PluginI18n): CommandEntry[] {
+  const candidates: [string, string, string | undefined][] = [
+    ["plugins.updates.command.update", "Update", status.commands.update],
+    ["plugins.updates.command.restartAll", "Restart all", status.commands.restart],
+    ["plugins.updates.command.restartWeb", "Restart Web/UI", status.commands.restartWeb],
+    ["plugins.updates.command.restartSessiond", "Restart session daemon", status.commands.restartSessiond],
+    ["plugins.updates.command.status", "Status", status.commands.status],
+  ];
+  return candidates
+    .filter((entry): entry is [string, string, string] => typeof entry[2] === "string" && entry[2] !== "")
+    .filter(([, , command]) => command !== recommended?.command)
+    .map(([key, fallback, command]) => ({ label: tr(i18n, key, fallback), command }));
 }
 
 export function messagesFor(state: PluginRuntimeState | undefined): PiWebStatusMessage[] {
@@ -62,7 +64,7 @@ export function shouldShowUpdatesPanel(state: PluginRuntimeState | undefined, hi
     || isSelfManagedInstallation(status.components.sessiond.installation);
 }
 
-export function fallbackDockerStatus(hint: UpdatesRuntimeHint, generatedAt = "federated status unavailable"): PiWebStatusResponse | undefined {
+export function fallbackDockerStatus(hint: UpdatesRuntimeHint, generatedAt = "federated status unavailable", i18n?: PluginI18n): PiWebStatusResponse | undefined {
   if (hint.dockerMode === undefined) return undefined;
   const commandPrefix = hint.dockerMode === "dev" ? "pi-web-docker --dev" : "pi-web-docker";
   const installation: PiWebInstallationInfo = { kind: "docker", dockerMode: hint.dockerMode };
@@ -84,25 +86,27 @@ export function fallbackDockerStatus(hint: UpdatesRuntimeHint, generatedAt = "fe
     messages: [{
       id: "docker-status-compatibility",
       severity: "info",
-      title: "Docker update commands available",
-      body: "This Updates plugin was loaded from a Docker PI WEB runtime, but the gateway has not provided Docker-aware status details yet. The Docker maintenance commands below are still available.",
+      title: tr(i18n, "plugins.updates.dockerNoticeTitle", "Docker update commands available"),
+      body: tr(i18n, "plugins.updates.dockerNoticeBody", "This Updates plugin was loaded from a Docker PI WEB runtime, but the gateway has not provided Docker-aware status details yet. The Docker maintenance commands below are still available."),
     }],
   };
 }
 
-export function formatVersion(version: string | undefined): string {
-  return version === undefined || version === "" ? "unknown" : version;
+export function formatVersion(version: string | undefined, i18n?: PluginI18n): string {
+  return version === undefined || version === "" ? tr(i18n, "plugins.updates.unknown", "unknown") : version;
 }
 
-export function installationLabel(installation: PiWebInstallationInfo | undefined): string {
-  if (installation === undefined) return "installation unknown";
+export function installationLabel(installation: PiWebInstallationInfo | undefined, i18n?: PluginI18n): string {
+  if (installation === undefined) return tr(i18n, "plugins.updates.installationUnknown", "installation unknown");
   if (installation.kind === "pi-package") {
     const scope = installation.scope === undefined ? "" : ` · ${installation.scope}`;
-    const source = installation.source ?? "Pi package";
+    const source = installation.source ?? tr(i18n, "plugins.updates.piPackage", "Pi package");
     return `${source}${scope}`;
   }
-  if (installation.kind === "npm-global") return "global npm package";
-  if (installation.kind === "local") return "local checkout";
-  if (installation.kind === "docker") return installation.dockerMode === "dev" ? "Docker development runtime" : "Docker runtime";
-  return "installation unknown";
+  if (installation.kind === "npm-global") return tr(i18n, "plugins.updates.npmGlobal", "global npm package");
+  if (installation.kind === "local") return tr(i18n, "plugins.updates.localCheckout", "local checkout");
+  if (installation.kind === "docker") return installation.dockerMode === "dev"
+    ? tr(i18n, "plugins.updates.dockerDev", "Docker development runtime")
+    : tr(i18n, "plugins.updates.docker", "Docker runtime");
+  return tr(i18n, "plugins.updates.installationUnknown", "installation unknown");
 }

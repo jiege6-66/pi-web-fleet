@@ -16,6 +16,7 @@ const plugin: PiWebPlugin = {
             title: "Open Workspace Tasks",
             titleKey: "plugins.tasks.open",
             description: `Open the workspace Tasks tab. Configure tasks in ${TASKS_CONFIG_PATH}.`,
+            descriptionKey: "plugins.tasks.openDescription",
             group: "Workspace",
             groupKey: "plugins.common.groupWorkspace",
             enabled: (context) => context.state.selectedWorkspace !== undefined,

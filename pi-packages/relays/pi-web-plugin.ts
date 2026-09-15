@@ -16,6 +16,7 @@ const plugin: PiWebPlugin = {
             title: "Open Workspace Relays",
             titleKey: "plugins.relays.open",
             description: `Open the workspace Relays tab. Relays live in ${RELAYS_ROOT}.`,
+            descriptionKey: "plugins.relays.openDescription",
             group: "Workspace",
             groupKey: "plugins.common.groupWorkspace",
             enabled: (context) => context.state.selectedWorkspace !== undefined,

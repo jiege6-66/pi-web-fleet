@@ -220,7 +220,7 @@ export class WorkspaceFilesPanel extends LitElement {
     const batches = workspaceUploadBatches(scope.uploadBatches);
     if (batches.length === 0) return null;
     return html`
-      <section class="upload-progress" aria-label="Workspace uploads">
+      <section class="upload-progress" aria-label=${tr(context.i18n, "plugins.files.uploadProgressAria", "Workspace uploads")}>
         <div class="upload-progress-header">
           <strong>${tr(context.i18n, "plugins.files.uploads", "Uploads")}</strong>
           <small>${uploadSummaryLabel(batches, context.i18n)}</small>
@@ -267,7 +267,7 @@ export class WorkspaceFilesPanel extends LitElement {
   ): TemplateResult {
     const fileCount = review.files.length;
     return html`
-      <dialog class="upload-dialog" aria-label="Review file upload" @cancel=${this.handleDialogCancel} @close=${this.handleDialogClose} @click=${this.handleDialogClick}>
+      <dialog class="upload-dialog" aria-label=${tr(context.i18n, "plugins.files.reviewDialogAria", "Review file upload")} @cancel=${this.handleDialogCancel} @close=${this.handleDialogClose} @click=${this.handleDialogClick}>
         <header>
           <div>
             <span class="eyebrow">${tr(context.i18n, "plugins.files.upload", "Upload")}</span>
@@ -285,7 +285,7 @@ export class WorkspaceFilesPanel extends LitElement {
             <label><input type="checkbox" .checked=${this.createDirs} @change=${this.handleCreateDirsChange} /><span>${tr(context.i18n, "plugins.files.createParentFolders", "Create parent folders")}</span></label>
             <label><input type="checkbox" .checked=${this.overwrite} @change=${this.handleOverwriteChange} /><span>${tr(context.i18n, "plugins.files.overwriteExisting", "Overwrite existing files")}</span></label>
           </div>
-          <section class="review-files" aria-label="Files to upload">
+          <section class="review-files" aria-label=${tr(context.i18n, "plugins.files.reviewFilesAria", "Files to upload")}>
             <strong>${fileCount === 1 ? tr(context.i18n, "plugins.files.fileSingular", "File") : tr(context.i18n, "plugins.files.filePlural", "Files")}</strong>
             ${review.files.map((file) => html`<div class="review-file"><span>${file.name}</span><small>${formatFileSize(file.size)}</small></div>`)}
           </section>

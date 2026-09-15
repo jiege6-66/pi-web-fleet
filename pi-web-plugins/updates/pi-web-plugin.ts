@@ -1,5 +1,6 @@
 import type { TemplateResult } from "lit";
-import type { HtmlTemplateTag, PiWebComponentStatus, PiWebPlugin, PiWebStatusMessage, PluginRuntimeState, WorkspacePanelTerminal } from "@jmfederico/pi-web/plugin-api";
+import type { HtmlTemplateTag, PiWebComponentStatus, PiWebPlugin, PiWebStatusMessage, PluginI18n, PluginRuntimeState, WorkspacePanelTerminal } from "@jmfederico/pi-web/plugin-api";
+import { tr } from "./i18n.js";
 import { additionalCommands, fallbackDockerStatus, formatVersion, installationLabel, messageCount, recommendedCommand, shouldShowUpdatesPanel, statusFor, type CommandEntry, type UpdatesRuntimeHint } from "./updatesLogic.js";
 
 function runCommandInTerminal(terminal: WorkspacePanelTerminal, label: string, command: string): void {
@@ -13,37 +14,41 @@ function runCommandInTerminal(terminal: WorkspacePanelTerminal, label: string, c
   });
 }
 
-function renderComponent(html: HtmlTemplateTag, component: PiWebComponentStatus): TemplateResult {
+function renderComponent(html: HtmlTemplateTag, component: PiWebComponentStatus, i18n?: PluginI18n): TemplateResult {
   const status = !component.available
-    ? "unavailable"
+    ? tr(i18n, "plugins.updates.statusUnavailable", "unavailable")
     : component.stale
-      ? "restart needed"
-      : "current";
+      ? tr(i18n, "plugins.updates.statusRestartNeeded", "restart needed")
+      : tr(i18n, "plugins.updates.statusCurrent", "current");
+  const running = formatVersion(component.runtimeVersion, i18n);
+  const installed = formatVersion(component.installedVersion, i18n);
+  const runningInstalled = tr(i18n, "plugins.updates.runningInstalled", "running {running} · installed {installed}", { running, installed });
+  const installText = installationLabel(component.installation, i18n);
   return html`
     <div class="updates-version-row">
       <strong>${component.label}</strong>
       <span>${status}</span>
-      <small>running ${formatVersion(component.runtimeVersion)} · installed ${formatVersion(component.installedVersion)}</small>
-      <small>${installationLabel(component.installation)}${component.installation?.path === undefined ? "" : ` · ${component.installation.path}`}</small>
+      <small>${runningInstalled}</small>
+      <small>${installText}${component.installation?.path === undefined ? "" : ` · ${component.installation.path}`}</small>
     </div>
   `;
 }
 
-function renderCommandActions(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, label: string, command: string): TemplateResult {
+function renderCommandActions(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, label: string, command: string, i18n?: PluginI18n): TemplateResult {
   return html`
     <span class="updates-command-actions">
-      <button @click=${() => { void navigator.clipboard.writeText(command); }}>Copy</button>
-      ${terminal === undefined ? null : html`<button class="primary" @click=${() => { runCommandInTerminal(terminal, label, command); }}>Run</button>`}
+      <button @click=${() => { void navigator.clipboard.writeText(command); }}>${tr(i18n, "plugins.updates.copy", "Copy")}</button>
+      ${terminal === undefined ? null : html`<button class="primary" @click=${() => { runCommandInTerminal(terminal, label, command); }}>${tr(i18n, "plugins.updates.run", "Run")}</button>`}
     </span>
   `;
 }
 
-function renderCommand(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, label: string, command: string): TemplateResult {
+function renderCommand(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, label: string, command: string, i18n?: PluginI18n): TemplateResult {
   return html`
     <div class="updates-command">
       <span>${label}</span>
       <code>${command}</code>
-      ${renderCommandActions(html, terminal, label, command)}
+      ${renderCommandActions(html, terminal, label, command, i18n)}
     </div>
   `;
 }
@@ -72,49 +77,49 @@ function renderNotice(html: HtmlTemplateTag, message: PiWebStatusMessage): Templ
   `;
 }
 
-function renderNotices(html: HtmlTemplateTag, messages: readonly PiWebStatusMessage[]): TemplateResult {
+function renderNotices(html: HtmlTemplateTag, messages: readonly PiWebStatusMessage[], i18n?: PluginI18n): TemplateResult {
   return html`
     <section>
-      ${messages.length === 0 ? html`<p class="muted">No PI WEB update or restart messages.</p>` : messages.map((message) => renderNotice(html, message))}
+      ${messages.length === 0 ? html`<p class="muted">${tr(i18n, "plugins.updates.noMessages", "No PI WEB update or restart messages.")}</p>` : messages.map((message) => renderNotice(html, message))}
     </section>
   `;
 }
 
-function renderRecommended(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, recommended: CommandEntry, messages: readonly PiWebStatusMessage[]): TemplateResult {
+function renderRecommended(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, recommended: CommandEntry, messages: readonly PiWebStatusMessage[], i18n?: PluginI18n): TemplateResult {
   return html`
     <section class="updates-recommended">
-      <strong>Recommended</strong>
+      <strong>${tr(i18n, "plugins.updates.recommended", "Recommended")}</strong>
       ${messages.length === 0
-        ? html`<p class="muted">Run this one command to bring this installation fully up to date. Nothing else is required.</p>`
+        ? html`<p class="muted">${tr(i18n, "plugins.updates.recommendedHelp", "Run this one command to bring this installation fully up to date. Nothing else is required.")}</p>`
         : messages.map((message) => renderNotice(html, message))}
-      ${renderCommand(html, terminal, recommended.label, recommended.command)}
+      ${renderCommand(html, terminal, recommended.label, recommended.command, i18n)}
     </section>
   `;
 }
 
-function renderAdditionalCommands(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, additional: readonly CommandEntry[], hasRecommended: boolean): TemplateResult | undefined {
+function renderAdditionalCommands(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, additional: readonly CommandEntry[], hasRecommended: boolean, i18n?: PluginI18n): TemplateResult | undefined {
   if (additional.length === 0) return undefined;
   return html`
     <section>
-      <strong>${hasRecommended ? "Additional commands (optional)" : "Suggested commands"}</strong>
-      ${hasRecommended ? html`<p class="muted">Only needed for finer control, such as restarting a single service.</p>` : null}
-      ${additional.map((entry) => renderCommand(html, terminal, entry.label, entry.command))}
+      <strong>${hasRecommended ? tr(i18n, "plugins.updates.additionalCommands", "Additional commands (optional)") : tr(i18n, "plugins.updates.suggestedCommands", "Suggested commands")}</strong>
+      ${hasRecommended ? html`<p class="muted">${tr(i18n, "plugins.updates.additionalCommandsHelp", "Only needed for finer control, such as restarting a single service.")}</p>` : null}
+      ${additional.map((entry) => renderCommand(html, terminal, entry.label, entry.command, i18n))}
     </section>
   `;
 }
 
-function renderUpdatesPanel(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, state: PluginRuntimeState | undefined): TemplateResult {
-  const status = statusFor(state) ?? fallbackDockerStatus(runtimeHint);
+function renderUpdatesPanel(html: HtmlTemplateTag, terminal: WorkspacePanelTerminal | undefined, state: PluginRuntimeState | undefined, i18n?: PluginI18n): TemplateResult {
+  const status = statusFor(state) ?? fallbackDockerStatus(runtimeHint, undefined, i18n);
   if (status === undefined) {
     return html`
-      <section class="toolbar"><strong>Updates</strong></section>
-      <section class="viewer"><p class="muted">Checking PI WEB update status…</p></section>
+      <section class="toolbar"><strong>${tr(i18n, "plugins.updates.panelTitle", "Updates")}</strong></section>
+      <section class="viewer"><p class="muted">${tr(i18n, "plugins.updates.checkingStatus", "Checking PI WEB update status…")}</p></section>
     `;
   }
 
   const messages = status.messages;
-  const recommended = recommendedCommand(status);
-  const additional = additionalCommands(status, recommended);
+  const recommended = recommendedCommand(status, i18n);
+  const additional = additionalCommands(status, recommended, i18n);
   return html`
     <style>
       .viewer.updates-status { flex: 1 1 auto; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 12px; overflow-y: auto; overflow-x: hidden; }
@@ -139,26 +144,26 @@ function renderUpdatesPanel(html: HtmlTemplateTag, terminal: WorkspacePanelTermi
         .updates-command > span { grid-column: 1 / -1; }
       }
     </style>
-    <section class="toolbar"><strong>Updates</strong>${messages.length > 0 ? html`<span class="stale">${String(messages.length)}</span>` : null}</section>
+    <section class="toolbar"><strong>${tr(i18n, "plugins.updates.panelTitle", "Updates")}</strong>${messages.length > 0 ? html`<span class="stale">${String(messages.length)}</span>` : null}</section>
     <section class="viewer updates-status">
       ${recommended === undefined
-        ? renderNotices(html, messages)
-        : renderRecommended(html, terminal, recommended, messages)}
+        ? renderNotices(html, messages, i18n)
+        : renderRecommended(html, terminal, recommended, messages, i18n)}
 
       <section>
-        <strong>Installed services</strong>
-        ${renderComponent(html, status.components.web)}
-        ${renderComponent(html, status.components.sessiond)}
+        <strong>${tr(i18n, "plugins.updates.installedServices", "Installed services")}</strong>
+        ${renderComponent(html, status.components.web, i18n)}
+        ${renderComponent(html, status.components.sessiond, i18n)}
       </section>
 
-      ${renderAdditionalCommands(html, terminal, additional, recommended !== undefined)}
+      ${renderAdditionalCommands(html, terminal, additional, recommended !== undefined, i18n)}
 
       <section class="updates-meta">
-        <span>Generated ${status.generatedAt}</span>
-        ${status.release.latestVersion === undefined ? null : html`<span>Latest npm release ${status.release.latestVersion}</span>`}
-        ${status.release.checkedAt === undefined || status.release.skipped === true ? null : html`<span>Release checked ${status.release.checkedAt}</span>`}
-        ${status.release.skipped === true ? html`<span>Remote version check skipped.</span>` : null}
-        ${status.release.error === undefined ? null : html`<span>Remote version check failed: ${status.release.error}</span>`}
+        <span>${tr(i18n, "plugins.updates.generatedAt", "Generated {time}", { time: status.generatedAt })}</span>
+        ${status.release.latestVersion === undefined ? null : html`<span>${tr(i18n, "plugins.updates.latestRelease", "Latest npm release {version}", { version: status.release.latestVersion })}</span>`}
+        ${status.release.checkedAt === undefined || status.release.skipped === true ? null : html`<span>${tr(i18n, "plugins.updates.releaseChecked", "Release checked {time}", { time: status.release.checkedAt })}</span>`}
+        ${status.release.skipped === true ? html`<span>${tr(i18n, "plugins.updates.remoteCheckSkipped", "Remote version check skipped.")}</span>` : null}
+        ${status.release.error === undefined ? null : html`<span>${tr(i18n, "plugins.updates.remoteCheckFailed", "Remote version check failed: {error}", { error: status.release.error })}</span>`}
       </section>
     </section>
   `;
@@ -177,8 +182,9 @@ const plugin: PiWebPlugin = {
           description: "Bypass cached release data and check the selected machine now",
           descriptionKey: "plugins.updates.checkDescription",
           group: "Updates",
+          groupKey: "plugins.updates.panelTitle",
           enabled: (context) => context.checkForPiWebUpdates !== undefined,
-          disabledReason: () => "Update checks require a newer PI WEB gateway",
+          disabledReason: (context) => tr(context.i18n, "plugins.updates.checkDisabledReason", "Update checks require a newer PI WEB gateway"),
           run: (context) => context.checkForPiWebUpdates?.(),
         },
       ],
@@ -201,7 +207,7 @@ const plugin: PiWebPlugin = {
             const count = messageCount(context.state);
             return count > 0 ? count : undefined;
           },
-          render: (context) => renderUpdatesPanel(html, context.terminal, context.state),
+          render: (context) => renderUpdatesPanel(html, context.terminal, context.state, context.i18n),
         },
       ],
     },

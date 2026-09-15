@@ -213,14 +213,14 @@ export class WorkspaceFileViewer extends LitElement {
     const src = this.previewUrl(file);
 
     return html`
-      ${kind === "pdf" ? html`<p class="preview-note" role="status">Inline PDF support varies by browser. Use Open ↗ or Download above if the document does not appear.</p>` : null}
+      ${kind === "pdf" ? html`<p class="preview-note" role="status">${tr(this.i18n, "plugins.files.viewerPdfNote", "Inline PDF support varies by browser. Use Open ↗ or Download above if the document does not appear.")}</p>` : null}
       <iframe
         class="file-frame-preview"
         src=${src}
         sandbox=${ifDefined(framePreviewSandbox(kind))}
         allow=""
         referrerpolicy="no-referrer"
-        title=${`Preview of ${file.path}`}
+        title=${`${tr(this.i18n, "plugins.files.viewerPreviewOf", "Preview of")} ${file.path}`}
         @error=${() => { this.recordPreviewFailure(token); }}
       ></iframe>
     `;

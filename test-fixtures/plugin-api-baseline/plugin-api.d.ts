@@ -6,6 +6,20 @@ export type LocalContributionId = string;
 export type QualifiedContributionId = string;
 export type HtmlTemplateTag = (strings: TemplateStringsArray, ...values: unknown[]) => TemplateResult;
 export type SvgTemplateTag = (strings: TemplateStringsArray, ...values: unknown[]) => TemplateResult;
+/**
+ * Host-provided translation for plugin UI copy.
+ *
+ * Keys are namespaced strings (for example `plugins.files.upload`); `params`
+ * interpolate `{name}` placeholders. The host resolves the active locale,
+ * falling back to English and finally to the key itself, so plugins can ship
+ * ahead of their translations. Lookups are synchronous; call them during
+ * render so language switches apply immediately.
+ */
+export interface PluginI18n {
+    (key: string, params?: Readonly<Record<string, string | number>>): string;
+    /** BCP 47-style identifier of the active locale (for example `en`, `zh-CN`). */
+    readonly locale: string;
+}
 export interface PiWebPlugin {
     apiVersion: 2;
     name: string;
@@ -20,6 +34,8 @@ export interface PluginActivationContext {
     readonly runtimePluginId: PluginId;
     readonly html: HtmlTemplateTag;
     readonly svg: SvgTemplateTag;
+    /** Host translation for plugin copy. Optional for older hosts. */
+    readonly i18n?: PluginI18n;
 }
 export interface PluginActivationResult {
     contributions: PluginContributions;
@@ -62,6 +78,8 @@ export interface PluginPromptEditor {
 export interface PluginRuntimeContext {
     state: PluginRuntimeState;
     prompt: PluginPromptEditor;
+    /** Host translation for plugin copy. Optional for older hosts. */
+    i18n?: PluginI18n;
     openActionPalette: () => void;
     focusPrompt: () => void;
     addProject: () => void | Promise<void>;
@@ -88,11 +106,17 @@ export interface PluginRuntimeContext {
 export interface PluginAction {
     id: LocalContributionId;
     title: string;
+    /** Host translation key; resolved at render time, falling back to `title`. */
+    titleKey?: string;
     description?: string;
+    /** Host translation key; resolved at render time, falling back to `description`. */
+    descriptionKey?: string;
     shortcut?: string;
     /** Former qualified action ids whose saved shortcut preference should still apply. */
     shortcutAliases?: QualifiedContributionId[];
     group?: string;
+    /** Host translation key; resolved at render time, falling back to `group`. */
+    groupKey?: string;
     enabled?: (context: PluginRuntimeContext) => boolean;
     /** Explain why a disabled action is visible but unavailable. */
     disabledReason?: (context: PluginRuntimeContext) => string | undefined;
@@ -232,6 +256,8 @@ export interface WorkspaceContext {
     workspace: Workspace;
     state?: PluginRuntimeState;
     files: WorkspaceFilesContextValue;
+    /** Host translation for plugin copy. Optional for older hosts. */
+    i18n?: PluginI18n;
     /** Legacy request helper for the server plugin that currently owns this workspace. */
     backend?: WorkspaceBackend;
     /** Exact package-paired request/channel capabilities, independent of workspace ownership. */
@@ -275,6 +301,8 @@ export interface WorkspaceInvalidation {
 export interface WorkspacePanelContribution {
     id: LocalContributionId;
     title: string;
+    /** Host translation key; resolved at render time, falling back to `title`. */
+    titleKey?: string;
     icon?: WorkspacePanelIcon;
     order?: number;
     /** Former URL tool/view values that should resolve to this panel. */
@@ -294,6 +322,8 @@ export interface WorkspaceLabelContext extends WorkspaceContext {
     workspace: Workspace;
     state?: PluginRuntimeState;
     files: WorkspaceFilesContextValue;
+    /** Host translation for plugin copy. Optional for older hosts. */
+    i18n?: PluginI18n;
     host: WorkspaceHost;
 }
 export type WorkspaceLabelItem = WorkspaceLabelTextItem | WorkspaceLabelLinkItem | WorkspaceLabelRenderItem;

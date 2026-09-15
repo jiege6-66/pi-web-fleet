@@ -3,6 +3,7 @@ import type {
   JsonValue,
   PluginAction,
   PluginContributions,
+  PluginI18n,
   PluginRuntimeContext,
   SvgTemplateTag,
   Workspace,
@@ -22,6 +23,7 @@ import { buildGitFileList, type GitFileListModel, type GitFileListSubmoduleFile,
 import { buildGitFileTree, collectGitFileTreeDirectoryPaths, type GitFileTreeNode } from "./gitFileTree.js";
 import { readGitFileView, writeGitFileView, type GitFileView } from "./gitFileViewPreference.js";
 import { createGitDiffRoute, type GitDiffRoute } from "./gitRoute.js";
+import { tr } from "./i18n.js";
 import { parseUnifiedDiff, type UnifiedDiffLine, type UnifiedDiffTextSpan } from "./unifiedDiff.js";
 
 const GIT_PANEL_LOCAL_ID = "workspace.git";
@@ -405,18 +407,18 @@ function renderGitPanel(html: HtmlTemplateTag, controller: GitUiController, cont
       <style .textContent=${gitPanelStyles}></style>
       <pi-web-git-panel-activity .controller=${controller} .context=${context}></pi-web-git-panel-activity>
       <section class="git-toolbar">
-        <strong>Git</strong>
-        ${state.stale ? html`<span class="git-stale">stale</span>` : null}
+        <strong>${tr(context.i18n, "plugins.git.panelTitle", "Git")}</strong>
+        ${state.stale ? html`<span class="git-stale">${tr(context.i18n, "plugins.git.stale", "stale")}</span>` : null}
         <div class="git-toolbar-actions">
           ${viewState.expandablePaths.length === 0 ? null : renderExpandCollapseAll(html, controller, context, state, viewState.expandablePaths)}
           ${renderViewToggle(html, controller, context)}
-          <button type="button" ?disabled=${state.statusLoading} @click=${() => { void controller.refresh(context); }}>Refresh</button>
+          <button type="button" ?disabled=${state.statusLoading} @click=${() => { void controller.refresh(context); }}>${tr(context.i18n, "plugins.git.refreshButton", "Refresh")}</button>
         </div>
       </section>
       ${state.error === undefined ? null : html`<div class="git-error" role="alert">${state.error}</div>`}
       <section class="git-split">
         <div class="git-file-list">${renderFileList(html, controller, context, state, viewState)}</div>
-        <div class="git-viewer">${renderDiffViewer(html, state)}</div>
+        <div class="git-viewer">${renderDiffViewer(html, state, context.i18n)}</div>
       </section>
     </section>
   `;
@@ -424,9 +426,9 @@ function renderGitPanel(html: HtmlTemplateTag, controller: GitUiController, cont
 
 function renderViewToggle(html: HtmlTemplateTag, controller: GitUiController, context: WorkspacePanelContext) {
   return html`
-    <div class="git-view-toggle" role="group" aria-label="Changed files view">
-      ${renderViewToggleButton(html, controller, context, "list", "List")}
-      ${renderViewToggleButton(html, controller, context, "tree", "Tree")}
+    <div class="git-view-toggle" role="group" aria-label=${tr(context.i18n, "plugins.git.viewGroupAria", "Changed files view")}>
+      ${renderViewToggleButton(html, controller, context, "list", tr(context.i18n, "plugins.git.viewList", "List"))}
+      ${renderViewToggleButton(html, controller, context, "tree", tr(context.i18n, "plugins.git.viewTree", "Tree"))}
     </div>
   `;
 }
@@ -444,7 +446,7 @@ function renderExpandCollapseAll(
   expandablePaths: readonly string[],
 ) {
   const allExpanded = expandablePaths.every((path) => state.expandedDirectories.has(path));
-  return html`<button type="button" @click=${() => { controller.toggleExpandAll(context, expandablePaths, allExpanded); }}>${allExpanded ? "Collapse all" : "Expand all"}</button>`;
+  return html`<button type="button" @click=${() => { controller.toggleExpandAll(context, expandablePaths, allExpanded); }}>${allExpanded ? tr(context.i18n, "plugins.git.collapseAll", "Collapse all") : tr(context.i18n, "plugins.git.expandAll", "Expand all")}</button>`;
 }
 
 function renderFileList(
@@ -455,10 +457,10 @@ function renderFileList(
   viewState: GitViewState,
 ) {
   const status = state.status;
-  if (status === undefined) return html`<p class="git-muted">${state.error === undefined ? "Loading status…" : "Status unavailable."}</p>`;
-  if (!status.isGitRepo) return html`<p class="git-muted">Not a git repository.</p>`;
-  const summary = html`<p class="git-summary">${gitSummary(status)}</p>`;
-  if (status.files.length === 0) return html`${summary}<p class="git-muted">No changes.</p>`;
+  if (status === undefined) return html`<p class="git-muted">${state.error === undefined ? tr(context.i18n, "plugins.git.loadingStatus", "Loading status…") : tr(context.i18n, "plugins.git.statusUnavailable", "Status unavailable.")}</p>`;
+  if (!status.isGitRepo) return html`<p class="git-muted">${tr(context.i18n, "plugins.git.notRepo", "Not a git repository.")}</p>`;
+  const summary = html`<p class="git-summary">${gitSummary(status, context.i18n)}</p>`;
+  if (status.files.length === 0) return html`${summary}<p class="git-muted">${tr(context.i18n, "plugins.git.noChanges", "No changes.")}</p>`;
   const body = controller.currentView() === "tree"
     ? viewState.nodes.map((node) => renderTreeNode(html, controller, context, state, node, 0))
     : renderListBody(html, controller, context, state, viewState.listModel);
@@ -489,7 +491,7 @@ function renderSubmoduleGroup(
   return html`
     <button type="button" class="git-row" style="--depth:0" aria-expanded=${String(expanded)} @click=${() => { controller.toggleDirectory(context, group.path); }}>
       <span class="git-twisty">${expanded ? "▾" : "▸"}</span>
-      <span>${group.name}${submoduleBadge(html)}</span>
+      <span>${group.name}${submoduleBadge(html, context.i18n)}</span>
     </button>
     ${expanded ? html`
       ${group.pointer === undefined ? null : renderSelectableRow(html, controller, context, state, group.path, group.pointer.name, group.pointer.file, 1)}
@@ -521,7 +523,7 @@ function renderTreeNode(
     return html`
       <button type="button" class="git-row" style=${`--depth:${String(depth)}`} aria-expanded=${String(expanded)} @click=${() => { controller.toggleDirectory(context, node.path); }}>
         <span class="git-twisty">${expanded ? "▾" : "▸"}</span>
-        <span>${node.name}${node.isSubmodule === true ? submoduleBadge(html) : null}</span>
+        <span>${node.name}${node.isSubmodule === true ? submoduleBadge(html, context.i18n) : null}</span>
       </button>
       ${expanded ? node.children.map((child) => renderTreeNode(html, controller, context, state, child, depth + 1)) : null}
     `;
@@ -558,25 +560,25 @@ function renderSelectableRow(
   `;
 }
 
-function renderDiffViewer(html: HtmlTemplateTag, state: GitWorkspaceUiState) {
-  if (state.selectedDiffPath === undefined) return html`<p class="git-muted">Select a changed file.</p>`;
+function renderDiffViewer(html: HtmlTemplateTag, state: GitWorkspaceUiState, i18n?: PluginI18n) {
+  if (state.selectedDiffPath === undefined) return html`<p class="git-muted">${tr(i18n, "plugins.git.selectFile", "Select a changed file.")}</p>`;
   const unstaged = state.selectedDiff;
   const staged = state.selectedStagedDiff;
-  if (unstaged === undefined || staged === undefined) return html`<p class="git-muted">Loading diff…</p>`;
+  if (unstaged === undefined || staged === undefined) return html`<p class="git-muted">${tr(i18n, "plugins.git.loadingDiff", "Loading diff…")}</p>`;
   const diffs = [staged, unstaged].filter((diff) => diff.response.diff !== "");
-  if (diffs.length === 0) return html`<p class="git-muted">No staged or unstaged diff.</p>`;
-  return html`<div class=${diffs.length === 1 ? "git-diffs is-single" : "git-diffs"}>${diffs.map((diff) => renderDiffSection(html, diff))}</div>`;
+  if (diffs.length === 0) return html`<p class="git-muted">${tr(i18n, "plugins.git.noDiffBoth", "No staged or unstaged diff.")}</p>`;
+  return html`<div class=${diffs.length === 1 ? "git-diffs is-single" : "git-diffs"}>${diffs.map((diff) => renderDiffSection(html, diff, i18n))}</div>`;
 }
 
-function renderDiffSection(html: HtmlTemplateTag, view: GitDiffView) {
+function renderDiffSection(html: HtmlTemplateTag, view: GitDiffView, i18n?: PluginI18n) {
   const diff = view.response;
   const lines = view.lines ??= parseUnifiedDiff(diff.diff);
   return html`
     <section class="git-diff-section">
-      <div class="git-viewer-header"><strong>${diff.path ?? "diff"}</strong><small>${diff.staged ? "staged" : "unstaged"}${diff.truncated ? " · truncated" : ""}</small></div>
-      ${lines.length === 0 ? html`<p class="git-muted">No diff.</p>` : html`
+      <div class="git-viewer-header"><strong>${diff.path ?? "diff"}</strong><small>${diff.staged ? tr(i18n, "plugins.git.staged", "staged") : tr(i18n, "plugins.git.unstaged", "unstaged")}${diff.truncated ? tr(i18n, "plugins.git.truncated", " · truncated") : ""}</small></div>
+      ${lines.length === 0 ? html`<p class="git-muted">${tr(i18n, "plugins.git.noDiff", "No diff.")}</p>` : html`
         <div class="git-diff-scroller">
-          <div class="git-diff-grid" role="table" aria-label="Unified diff">
+          <div class="git-diff-grid" role="table" aria-label=${tr(i18n, "plugins.git.diffTableAria", "Unified diff")}>
             ${lines.map((line) => renderDiffLine(html, line))}
           </div>
         </div>
@@ -661,12 +663,12 @@ function defineGitPanelActivityElement(): void {
   customElements.define(activityElementTag, GitPanelActivityElement);
 }
 
-function submoduleBadge(html: HtmlTemplateTag) {
-  return html`<span class="submodule-badge">submodule</span>`;
+function submoduleBadge(html: HtmlTemplateTag, i18n?: PluginI18n) {
+  return html`<span class="submodule-badge">${tr(i18n, "plugins.git.submodule", "submodule")}</span>`;
 }
 
-function gitSummary(status: GitStatusResponse): string {
-  const branch = status.branch ?? "detached";
+function gitSummary(status: GitStatusResponse, i18n?: PluginI18n): string {
+  const branch = status.branch ?? tr(i18n, "plugins.git.detached", "detached");
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
   return ahead === 0 && behind === 0 ? branch : `${branch} · ↑${String(ahead)} ↓${String(behind)}`;

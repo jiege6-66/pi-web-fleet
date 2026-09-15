@@ -1,6 +1,8 @@
 import { css, html, LitElement } from "lit";
 import { property } from "lit/decorators.js";
-import { TERMINAL_SOFT_KEYS, terminalSoftKeySequence, type TerminalModesSnapshot, type TerminalSoftKeyDefinition } from "./terminalKeys";
+import type { PluginI18n } from "@jmfederico/pi-web/plugin-api";
+import { TERMINAL_SOFT_KEYS, terminalSoftKeySequence, type TerminalModesSnapshot, type TerminalSoftKeyDefinition, type TerminalSoftKeyId } from "./terminalKeys";
+import { tr } from "./i18n";
 
 const SOFT_KEY_TAP_MOVE_THRESHOLD_PX = 8;
 const SYNTHETIC_CLICK_SUPPRESSION_MS = 500;
@@ -9,7 +11,32 @@ export interface TerminalSoftKeyInputOptions {
   refocus: boolean;
 }
 
+const SOFT_KEY_I18N_NAMES: Record<TerminalSoftKeyId, string> = {
+  "escape": "escape",
+  "tab": "tab",
+  "ctrl-c": "ctrlC",
+  "ctrl-d": "ctrlD",
+  "ctrl-z": "ctrlZ",
+  "ctrl-l": "ctrlL",
+  "ctrl-r": "ctrlR",
+  "ctrl-u": "ctrlU",
+  "ctrl-w": "ctrlW",
+  "arrow-left": "arrowLeft",
+  "arrow-up": "arrowUp",
+  "arrow-down": "arrowDown",
+  "arrow-right": "arrowRight",
+  "home": "home",
+  "end": "end",
+  "page-up": "pageUp",
+  "page-down": "pageDown",
+  "delete": "delete",
+  "backspace": "backspace",
+  "meta-backward-word": "metaB",
+  "meta-forward-word": "metaF",
+};
+
 export class TerminalSoftKeys extends LitElement {
+  @property({ attribute: false }) i18n: PluginI18n | undefined;
   @property({ attribute: false }) modes: TerminalModesSnapshot | undefined;
   @property({ type: Boolean }) refocusOnClick = true;
   @property({ attribute: false }) onInput: (data: string, options: TerminalSoftKeyInputOptions) => void = () => undefined;
@@ -61,20 +88,25 @@ export class TerminalSoftKeys extends LitElement {
 
   override render() {
     return html`
-      <div class="terminal-soft-keys" role="toolbar" aria-label="Terminal soft keys">
-        ${TERMINAL_SOFT_KEYS.map((key) => html`
-          <button
-            type="button"
-            class="soft-key"
-            title=${key.title}
-            aria-label=${key.ariaLabel}
-            @pointerdown=${(event: PointerEvent) => { this.onSoftKeyPointerDown(event, key); }}
-            @pointermove=${(event: PointerEvent) => { this.onSoftKeyPointerMove(event); }}
-            @pointerup=${(event: PointerEvent) => { this.onSoftKeyPointerUp(event, key); }}
-            @pointercancel=${(event: PointerEvent) => { this.onSoftKeyPointerCancel(event); }}
-            @click=${(event: MouseEvent) => { this.onSoftKeyClick(event, key); }}
-          >${key.label}</button>
-        `)}
+      <div class="terminal-soft-keys" role="toolbar" aria-label=${tr(this.i18n, "plugins.terminal.softKeys.toolbarAria", "Terminal soft keys")}>
+        ${TERMINAL_SOFT_KEYS.map((key) => {
+          const name = SOFT_KEY_I18N_NAMES[key.id];
+          const title = tr(this.i18n, `plugins.terminal.softKeys.${name}.title`, key.title);
+          const ariaLabel = tr(this.i18n, `plugins.terminal.softKeys.${name}.aria`, key.ariaLabel);
+          return html`
+            <button
+              type="button"
+              class="soft-key"
+              title=${title}
+              aria-label=${ariaLabel}
+              @pointerdown=${(event: PointerEvent) => { this.onSoftKeyPointerDown(event, key); }}
+              @pointermove=${(event: PointerEvent) => { this.onSoftKeyPointerMove(event); }}
+              @pointerup=${(event: PointerEvent) => { this.onSoftKeyPointerUp(event, key); }}
+              @pointercancel=${(event: PointerEvent) => { this.onSoftKeyPointerCancel(event); }}
+              @click=${(event: MouseEvent) => { this.onSoftKeyClick(event, key); }}
+            >${key.label}</button>
+          `;
+        })}
       </div>
     `;
   }

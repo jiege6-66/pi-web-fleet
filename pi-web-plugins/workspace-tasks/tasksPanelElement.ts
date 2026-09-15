@@ -1,4 +1,5 @@
-import type { WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
+import type { PluginI18n, WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
+import { tr } from "./i18n.js";
 import { TASKS_CONFIG_PATH, type WorkspaceTask } from "./config.js";
 import { runWorkspaceTaskInTerminal } from "./taskRunner.js";
 import { loadWorkspaceTasksConfig, tasksConfigRefreshHint, tasksConfigUnavailableMessage, type WorkspaceTasksConfigLoadResult } from "./workspaceTasksClient.js";
@@ -14,6 +15,8 @@ type ConfigState =
 interface TaskStatus {
   kind: "info" | "success" | "error";
   message: string;
+  key?: string;
+  params?: Readonly<Record<string, string | number>>;
   detail?: string;
 }
 
@@ -30,6 +33,10 @@ export function tasksPanelBadge(context: WorkspacePanelContext): string | undefi
 
 class PiWebTasksPanel extends HTMLElement {
   private contextValue: WorkspacePanelContext | undefined;
+  private localeValue: string | undefined;
+  private text(key: string, fallback: string, params?: Readonly<Record<string, string | number>>): string {
+    return tr(this.contextValue?.i18n, `plugins.tasks.${key}`, fallback, params);
+  }
   private runningTaskId: string | undefined;
   private status: TaskStatus | undefined;
   private readonly root: ShadowRoot;
@@ -45,10 +52,15 @@ class PiWebTasksPanel extends HTMLElement {
   set context(value: WorkspacePanelContext | undefined) {
     const previousKey = this.contextValue === undefined ? undefined : cacheKeyForContext(this.contextValue);
     const nextKey = value === undefined ? undefined : cacheKeyForContext(value);
+    const localeChanged = this.localeValue !== value?.i18n?.locale;
+    this.localeValue = value?.i18n?.locale;
     this.contextValue = value;
-    // Parent app updates should not rebuild this shadow DOM for the same workspace:
-    // doing so resets the mobile scroll position and can replace buttons mid-click.
-    if (previousKey === nextKey) return;
+    // Cache the string: the host translation handle exposes a mutable locale getter.
+    // A language-only update must not reload config or reset an in-flight dispatch.
+    if (previousKey === nextKey) {
+      if (localeChanged) this.render();
+      return;
+    }
     this.runningTaskId = undefined;
     this.status = undefined;
     this.render();
@@ -66,7 +78,7 @@ class PiWebTasksPanel extends HTMLElement {
   private render(): void {
     const context = this.contextValue;
     if (context === undefined) {
-      this.root.innerHTML = `${taskStyles()}<section class="empty">Select a workspace.</section>`;
+      this.root.innerHTML = `${taskStyles()}<section class="empty">${escapeHtml(this.text("selectWorkspace", "Select a workspace."))}</section>`;
       return;
     }
 
@@ -74,10 +86,10 @@ class PiWebTasksPanel extends HTMLElement {
     this.root.innerHTML = `
       ${taskStyles()}
       <section class="toolbar">
-        <strong>Workspace Tasks</strong>
+        <strong>${escapeHtml(this.text("heading", "Workspace Tasks"))}</strong>
         <span class="toolbar-tasks">
-          <button class="secondary" data-refresh-config ${state.kind === "loading" ? "disabled" : ""}>Refresh</button>
-          <button class="secondary" data-open-terminal>Open Terminal</button>
+          <button class="secondary" data-refresh-config ${state.kind === "loading" ? "disabled" : ""}>${escapeHtml(this.text("refresh", "Refresh"))}</button>
+          <button class="secondary" data-open-terminal>${escapeHtml(this.text("openTerminal", "Open Terminal"))}</button>
         </span>
       </section>
       ${this.renderStatus()}
@@ -105,7 +117,7 @@ class PiWebTasksPanel extends HTMLElement {
     if (!this.isCurrentContext(context)) return Promise.resolve();
     const task = taskFromConfigState(getCachedWorkspaceConfig(context), taskId);
     if (task === undefined) {
-      this.status = { kind: "error", message: "That task is no longer available. Click Refresh, then try again." };
+      this.status = { kind: "error", key: "taskGone", message: "That task is no longer available. Click Refresh, then try again." };
       this.render();
       return Promise.resolve();
     }
@@ -117,58 +129,60 @@ class PiWebTasksPanel extends HTMLElement {
   }
 
   private renderConfigState(state: ConfigState): string {
-    if (state.kind === "loading") return `<p class="muted">Loading ${escapeHtml(TASKS_CONFIG_PATH)}…</p>`;
-    if (state.kind === "missing") return renderMissingState(state);
-    if (state.kind === "unavailable") return renderUnavailableState(state);
+    const i18n = this.contextValue?.i18n;
+    if (state.kind === "loading") return `<p class="muted">${escapeHtml(this.text("loading", "Loading {path}…", { path: TASKS_CONFIG_PATH }))}</p>`;
+    if (state.kind === "missing") return renderMissingState(state, i18n);
+    if (state.kind === "unavailable") return renderUnavailableState(state, i18n);
 
-    if (state.config.tasks.length === 0) return `<p class="muted">No tasks are defined in ${escapeHtml(state.path)}. Add tasks to the file, then click Refresh.</p>`;
+    if (state.config.tasks.length === 0) return `<p class="muted">${escapeHtml(this.text("empty", "No tasks are defined in {path}. Add tasks to the file, then click Refresh.", { path: state.path }))}</p>`;
     return `
-      <p class="muted">Tasks run in a dedicated workspace terminal, then switch to that terminal. Edit ${escapeHtml(state.path)} and click Refresh to reload.</p>
-      ${renderTaskGroups(state.config.tasks, this.runningTaskId)}
+      <p class="muted">${escapeHtml(this.text("instructions", "Tasks run in a dedicated workspace terminal, then switch to that terminal. Edit {path} and click Refresh to reload.", { path: state.path }))}</p>
+      ${renderTaskGroups(state.config.tasks, this.runningTaskId, i18n)}
     `;
   }
 
   private renderStatus(): string {
     if (this.status === undefined) return "";
     const detail = this.status.detail === undefined ? "" : `<pre>${escapeHtml(this.status.detail)}</pre>`;
-    return `<div class="status panel-status ${escapeAttr(this.status.kind)}">${escapeHtml(this.status.message)}${detail}</div>`;
+    const message = this.status.key === undefined ? this.status.message : this.text(this.status.key, this.status.message, this.status.params);
+    return `<div class="status panel-status ${escapeAttr(this.status.kind)}">${escapeHtml(message)}${detail}</div>`;
   }
 
   private async refreshConfig(context: WorkspacePanelContext): Promise<void> {
-    this.status = { kind: "info", message: `Refreshing ${TASKS_CONFIG_PATH}…` };
+    this.status = { kind: "info", key: "refreshing", message: "Refreshing {path}…", params: { path: TASKS_CONFIG_PATH } };
     configCache.set(cacheKeyForContext(context), { kind: "loading" });
     this.render();
 
     const state = await refreshWorkspaceConfig(context);
     if (!this.isCurrentContext(context)) return;
     this.status = state.kind === "loaded"
-      ? { kind: "success", message: `Loaded ${String(state.config.tasks.length)} task${state.config.tasks.length === 1 ? "" : "s"}.` }
+      ? { kind: "success", key: state.config.tasks.length === 1 ? "loadedOne" : "loadedMany", message: state.config.tasks.length === 1 ? "Loaded {count} task." : "Loaded {count} tasks.", params: { count: state.config.tasks.length } }
       : undefined;
     this.render();
   }
 
   private async dispatchTask(context: WorkspacePanelContext, task: WorkspaceTask): Promise<void> {
     if (this.runningTaskId !== undefined) {
-      this.status = { kind: "info", message: "Another task is already starting. Wait for it to finish dispatching, then try again." };
+      this.status = { kind: "info", key: "alreadyStarting", message: "Another task is already starting. Wait for it to finish dispatching, then try again." };
       this.render();
       return;
     }
-    if (task.confirm && !window.confirm(`Run ${task.title}?\n\n${task.command}`)) {
-      this.status = { kind: "info", message: `Cancelled ${task.title}.` };
+    if (task.confirm && !window.confirm(this.text("confirmRun", "Run {title}?\n\n{command}", { title: task.title, command: task.command }))) {
+      this.status = { kind: "info", key: "cancelled", message: "Cancelled {title}.", params: { title: task.title } };
       this.render();
       return;
     }
 
     this.runningTaskId = task.id;
-    this.status = { kind: "info", message: `Starting ${task.title}…` };
+    this.status = { kind: "info", key: "starting", message: "Starting {title}…", params: { title: task.title } };
     this.render();
 
     try {
       const handle = await runWorkspaceTaskInTerminal(context.terminal, task);
       if (!this.isCurrentContext(context)) return;
       this.status = {
-        kind: "success",
-        message: `Started terminal command “${handle.run.title}”.`,
+        kind: "success", key: "started",
+        message: "Started terminal command “{title}”.", params: { title: handle.run.title },
         detail: task.command,
       };
       this.runningTaskId = undefined;
@@ -184,7 +198,7 @@ class PiWebTasksPanel extends HTMLElement {
   private openWorkspaceTerminal(terminalId?: string): void {
     const context = this.contextValue;
     if (context === undefined) {
-      this.status = { kind: "error", message: "Select a workspace before opening a terminal." };
+      this.status = { kind: "error", key: "selectBeforeTerminal", message: "Select a workspace before opening a terminal." };
       this.render();
       return;
     }
@@ -225,17 +239,17 @@ function cacheKeyForContext(context: WorkspacePanelContext): string {
   return `${context.machine.id}:${context.workspace.projectId}:${context.workspace.id}`;
 }
 
-function renderMissingState(state: Extract<ConfigState, { kind: "missing" }>): string {
-  return `<div class="empty-state"><strong>${escapeHtml(state.message)}</strong><p>${escapeHtml(state.hint)}</p></div>`;
+function renderMissingState(state: Extract<ConfigState, { kind: "missing" }>, i18n?: PluginI18n): string {
+  return `<div class="empty-state"><strong>${escapeHtml(tr(i18n, "plugins.tasks.missing", state.message))}</strong><p>${escapeHtml(tr(i18n, "plugins.tasks.missingHint", state.hint, { path: TASKS_CONFIG_PATH }))}</p></div>`;
 }
 
-function renderUnavailableState(state: Extract<ConfigState, { kind: "unavailable" }>): string {
+function renderUnavailableState(state: Extract<ConfigState, { kind: "unavailable" }>, i18n?: PluginI18n): string {
   const detail = state.detail === undefined ? "" : `<pre>${escapeHtml(state.detail)}</pre>`;
-  return `<div class="status error"><strong>${escapeHtml(state.message)}</strong><p>${escapeHtml(state.hint)}</p>${detail}</div>`;
+  return `<div class="status error"><strong>${escapeHtml(tr(i18n, "plugins.tasks.unavailable", state.message))}</strong><p>${escapeHtml(tr(i18n, "plugins.tasks.fixHint", state.hint, { path: TASKS_CONFIG_PATH }))}</p>${detail}</div>`;
 }
 
-function renderTaskGroups(tasks: WorkspaceTask[], runningTaskId: string | undefined): string {
-  return `<div class="tasks">${groupTasks(tasks).map((group) => renderTaskGroup(group, runningTaskId)).join("")}</div>`;
+function renderTaskGroups(tasks: WorkspaceTask[], runningTaskId: string | undefined, i18n?: PluginI18n): string {
+  return `<div class="tasks">${groupTasks(tasks).map((group) => renderTaskGroup(group, runningTaskId, i18n)).join("")}</div>`;
 }
 
 function groupTasks(tasks: WorkspaceTask[]): { title: string | undefined; tasks: WorkspaceTask[] }[] {
@@ -252,12 +266,12 @@ function groupTasks(tasks: WorkspaceTask[]): { title: string | undefined; tasks:
   return groups;
 }
 
-function renderTaskGroup(group: { title: string | undefined; tasks: WorkspaceTask[] }, runningTaskId: string | undefined): string {
+function renderTaskGroup(group: { title: string | undefined; tasks: WorkspaceTask[] }, runningTaskId: string | undefined, i18n?: PluginI18n): string {
   const title = group.title === undefined ? "" : `<h3>${escapeHtml(group.title)}</h3>`;
-  return `<section class="task-group">${title}${group.tasks.map((task) => renderTask(task, runningTaskId)).join("")}</section>`;
+  return `<section class="task-group">${title}${group.tasks.map((task) => renderTask(task, runningTaskId, i18n)).join("")}</section>`;
 }
 
-function renderTask(task: WorkspaceTask, runningTaskId: string | undefined): string {
+function renderTask(task: WorkspaceTask, runningTaskId: string | undefined, i18n?: PluginI18n): string {
   const running = runningTaskId === task.id;
   const disabled = runningTaskId !== undefined;
   const description = task.description === undefined ? "" : `<span>${escapeHtml(task.description)}</span>`;
@@ -268,7 +282,7 @@ function renderTask(task: WorkspaceTask, runningTaskId: string | undefined): str
         ${description}
         <code>${escapeHtml(task.command)}</code>
       </div>
-      <button data-task-id="${escapeAttr(task.id)}" ${disabled ? "disabled" : ""}>${running ? "Dispatching…" : "Run"}</button>
+      <button data-task-id="${escapeAttr(task.id)}" ${disabled ? "disabled" : ""}>${escapeHtml(running ? tr(i18n, "plugins.tasks.dispatching", "Dispatching…") : tr(i18n, "plugins.tasks.run", "Run"))}</button>
     </article>
   `;
 }

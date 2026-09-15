@@ -10,7 +10,8 @@ import type { ToolExecutionPart } from "./shared";
 const MAX_COLLAPSED_DIFF_LINES = 180;
 
 interface ToolTarget {
-  label: "Command" | "File" | "Input";
+  labelKey: "chat.targetCommand" | "chat.targetFile" | "chat.targetInput";
+  fallback: "Command" | "File" | "Input";
   text: string;
 }
 
@@ -67,15 +68,16 @@ export class ToolExecutionView extends LitElement {
 
   private renderHeaderTarget(target: ToolTarget | undefined) {
     if (target === undefined) return null;
-    const className = target.label === "File" ? "path" : "summary";
-    return html`<span class=${className} title=${target.text} aria-label=${`${target.label}: ${target.text}`}>${target.text}</span>`;
+    const className = target.fallback === "File" ? "path" : "summary";
+    const label = t(target.labelKey);
+    return html`<span class=${className} title=${target.text} aria-label=${`${label}: ${target.text}`}>${target.text}</span>`;
   }
 
   private renderExpandedTarget(target: ToolTarget | undefined) {
     if (target === undefined) return null;
     return html`
       <div class="detail-target">
-        <span class="detail-label">${target.label}</span>
+        <span class="detail-label">${t(target.labelKey)}</span>
         <pre class="detail-target-value">${target.text}</pre>
       </div>
     `;
@@ -105,7 +107,7 @@ export class ToolExecutionView extends LitElement {
       <details class="diff-details" ?open=${this.diffOpen} @toggle=${(event: Event) => { this.onDiffToggle(event); }}>
         <summary>
           <span>${label}</span>
-          <small>${String(lines.length)} ${lines.length === 1 ? "line" : "lines"}</small>
+          <small>${lines.length === 1 ? t("chat.diffLineCount", { count: lines.length }) : t("chat.diffLinesCount", { count: lines.length })}</small>
         </summary>
         ${this.renderExpandedTarget(target)}
         <div class="diff-toolbar">
@@ -328,10 +330,10 @@ export class ToolExecutionView extends LitElement {
 }
 
 function toolTarget(execution: ToolExecutionPart, path: string | undefined): ToolTarget | undefined {
-  if (path !== undefined && path !== "") return { label: "File", text: path };
+  if (path !== undefined && path !== "") return { labelKey: "chat.targetFile", fallback: "File", text: path };
   const command = getString(execution.args, "command");
-  if (command !== undefined && command !== "") return { label: "Command", text: command };
-  if (execution.summary !== "") return { label: "Input", text: execution.summary };
+  if (command !== undefined && command !== "") return { labelKey: "chat.targetCommand", fallback: "Command", text: command };
+  if (execution.summary !== "") return { labelKey: "chat.targetInput", fallback: "Input", text: execution.summary };
   return undefined;
 }
 
